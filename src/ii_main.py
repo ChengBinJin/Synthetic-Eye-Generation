@@ -7,11 +7,13 @@
 # --------------------------------------------------------------------------
 import os
 import logging
+import cv2
+import numpy as np
 from datetime import datetime
 import tensorflow as tf
 
 import utils as utils
-# from dataset import Dataset
+from dataset import Dataset
 # from resnet import ResNet18
 
 FLAGS = tf.flags.FLAGS
@@ -66,19 +68,25 @@ def main(_):
     model_dir, log_dir = utils.make_folders_simple(cur_time=cur_time,
                                                    subfolder='identification')
 
-    # # Logger
-    # logger = logging.getLogger(__name__)  # logger
-    # logger.setLevel(logging.INFO)
-    # utils.init_logger(logger=logger, logDir=log_dir, isTrain=FLAGS.is_train, name='main')
-    # print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
+    # Logger
+    logger = logging.getLogger(__name__)  # logger
+    logger.setLevel(logging.INFO)
+    utils.init_logger(logger=logger, log_dir=log_dir, is_train=FLAGS.is_train, name='main')
+    print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
 
-    # # Initialize dataset
-    # data = Dataset(name=FLAGS.dataset,
-    #                track='Identification',
-    #                isTrain=FLAGS.is_train,
-    #                resizedFactor=FLAGS.resize_factor,
-    #                logDir=log_dir)
-    #
+    # Initialize dataset
+    data = Dataset(is_train=FLAGS.is_train, log_dir=log_dir)
+    train_batch, train_label = data.next_batch(batch_size=FLAGS.batch_size)
+
+    print('train_batch shape: {}'.format(train_batch.shape))
+    for i in range(train_batch.shape[0]):
+        img = train_batch[i]
+        print('Label: {}'.format(train_label[i]))
+
+        cv2.imshow('Show', img.astype(np.uint8))
+        if cv2.waitKey(0) & 0xFF == 27:
+            exit('Esc clicked!')
+
     # model = ResNet18(decode_img_shape=data.decode_img_shape,
     #                  num_classes=data.num_identities,
     #                  data_path=data(),
@@ -90,7 +98,6 @@ def main(_):
     #                  log_dir=log_dir,
     #                  resize_factor=FLAGS.resize_factor)
 
-    print("Hello iimain.py!")
 
 if __name__ == '__main__':
     tf.compat.v1.app.run()
