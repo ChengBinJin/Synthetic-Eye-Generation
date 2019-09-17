@@ -42,21 +42,36 @@ class Dataset(object):
         self.num_val_imgs = len(self.val_paths)
         self.num_test_imgs = len(self.test_paths)
 
-    def next_batch(self, batch_size=2):
-        train_batch = np.zeros((batch_size, *self.input_img_shape), dtype=np.float32)
-        train_label = np.zeros((batch_size, 1), dtype=np.uint8)
-
+    def train_batch(self, batch_size):
+        # Test eval function
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
+
+        train_imgs, train_labels = self.read_data(img_paths)
+
+        return train_imgs, train_labels
+
+    def val_batch(self, batch_size, index):
+        if index + batch_size < self.num_val_imgs:
+            img_paths = self.val_paths[index:index+batch_size]
+        else:
+            img_paths = self.val_paths[index:]
+
+        val_imgs, val_labels = self.read_data(img_paths)
+
+        return val_imgs, val_labels
+
+    def read_data(self, img_paths):
+        batch_imgs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
+        batch_labels = np.zeros((len(img_paths), 1), dtype=np.uint8)
 
         for i, img_path in enumerate(img_paths):
             img_combine = cv2.imread(img_path)
             img = img_combine[:, :self.img_shape[1], 1]
             img = cv2.resize(img, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_LINEAR)
-            train_batch[i, :, :, 0] = img
+            batch_imgs[i, :, :, 0] = img
+            batch_labels[i] = self.convert_to_cls(img_path)
 
-            train_label[i] = self.convert_to_cls(img_path)
-
-        return train_batch, train_label
+        return batch_imgs, batch_labels
 
     @staticmethod
     def convert_to_cls(img_name):

@@ -31,13 +31,14 @@ class ResNet18(object):
         utils.init_logger(logger=self.logger, log_dir=self.log_dir, is_train=self.is_train, name=self.name)
 
         self._build_graph()
+        self._eval_graph()
         self._init_tensorboard()
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
     def _build_graph(self):
-        self.img_tfph = tf.compat.v1.placeholder(dtype=tf.float32, shape=[None, *self.input_img_shape])
-        self.gt_tfph = tf.compat.v1.placeholder(dtype=tf.uint8, shape=[None, 1])
-        self.train_mode = tf.compat.v1.placeholder(dtype=tf.bool, name='train_mode_ph')
+        self.img_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.float32, shape=[None, *self.input_img_shape])
+        self.gt_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.int64, shape=[None, 1])
+        self.train_mode = tf.compat.v1.placeholder(dtype=tf.dtypes.bool, name='train_mode_ph')
 
         # Network forward for training
         self.pred_train = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
@@ -60,11 +61,26 @@ class ResNet18(object):
         train_ops = [train_op] + self._ops
         self.train_op = tf.group(*train_ops)
 
+    def _eval_graph(self):
+        # Calculate accuracy using TensorFlow
+        with tf.compat.v1.name_scope('Metrics'):
+            self.accuracy_metric, self.accuracy_metric_update = tf.compat.v1.metrics.accuracy(
+                labels=tf.squeeze(self.gt_tfph, axis=-1), predictions=self.pred_train_cls)
+
+        # Isolate the variables stored behind the scens by the metric operation
+        running_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.LOCAL_VARIABLES, scope='Metrics')
+
+        # Define initializer to initialie/reset running variables
+        self.running_vars_initializer = tf.compat.v1.variables_initializer(var_list=running_vars)
+
     def _init_tensorboard(self):
         self.tb_total = tf.summary.scalar('Loss/total_loss', self.total_loss)
         self.tb_data = tf.summary.scalar('Loss/data_loss', self.data_loss)
         self.tb_reg = tf.summary.scalar('Loss/reg_term', self.reg_term)
         self.summary_op = tf.summary.merge(inputs=[self.tb_total, self.tb_data, self.tb_reg, self.tb_lr])
+
+        self.tb_accuracy = tf.summary.scalar('Acc/accuracy', self.accuracy_metric * 100.)
+        self.metric_summary_op = tf.summary.merge(inputs=[self.tb_accuracy])
 
     def init_optimizer(self, loss, name='Adam'):
         with tf.compat.v1.variable_scope(name):

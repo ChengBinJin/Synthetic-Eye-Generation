@@ -23,7 +23,7 @@ class Solver(object):
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def train(self):
-        img_trains, cls_trains = self.data.next_batch(batch_size=self.batch_size)
+        img_trains, cls_trains = self.data.train_batch(batch_size=self.batch_size)
 
         feed = {
             self.model.img_tfph: img_trains,
@@ -41,3 +41,27 @@ class Solver(object):
             [train_op, total_loss_op, data_loss_op, reg_term_op, summary_op], feed_dict=feed)
 
         return total_loss, data_loss, reg_term, summary
+
+    def eval(self, tb_writer, iter_time):
+        # Initialize/reset the running variables
+        self.sess.run(self.model.running_vars_initializer)
+
+        for i in range(0, self.data.num_val_imgs, self.batch_size):
+            img_vals, cls_vals = self.data.val_batch(batch_size=self.batch_size, index=i)
+
+            feed = {
+                self.model.img_tfph: img_vals,
+                self.model.gt_tfph: cls_vals,
+                self.model.train_mode: False
+            }
+
+            self.sess.run(self.model.accuracy_metric_update, feed_dict=feed)
+
+        # Calculate the accuracy
+        accuracy, metric_summary_op = self.sess.run([self.model.accuracy_metric, self.model.metric_summary_op])
+
+        # Write to tensorboard
+        tb_writer.add_summary(metric_summary_op, iter_time)
+        tb_writer.flush()
+
+        return accuracy * 100.
