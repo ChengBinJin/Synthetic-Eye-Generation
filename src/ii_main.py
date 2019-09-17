@@ -14,7 +14,9 @@ import tensorflow as tf
 
 import utils as utils
 from dataset import Dataset
-# from resnet import ResNet18
+from resnet import ResNet18
+from ii_solver import Solver
+
 
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_string('gpu_index', '0', 'gpu index if you have multiple gpus, default: 0')
@@ -76,27 +78,27 @@ def main(_):
 
     # Initialize dataset
     data = Dataset(is_train=FLAGS.is_train, log_dir=log_dir)
-    train_batch, train_label = data.next_batch(batch_size=FLAGS.batch_size)
+    # Initialize model
+    model = ResNet18(input_img_shape=data.input_img_shape,
+                     num_classes=data.num_identities,
+                     lr=FLAGS.learning_rate,
+                     weight_decay=FLAGS.weight_decay,
+                     total_iters=FLAGS.epoch * data.num_train_imgs,
+                     is_train=FLAGS.is_train,
+                     log_dir=log_dir)
+    # Initialize solver
+    solver = Solver(model, data, batch_size=FLAGS.batch_size)
 
-    print('train_batch shape: {}'.format(train_batch.shape))
-    for i in range(train_batch.shape[0]):
-        img = train_batch[i]
-        print('Label: {}'.format(train_label[i]))
+    train(solver)
 
-        cv2.imshow('Show', img.astype(np.uint8))
-        if cv2.waitKey(0) & 0xFF == 27:
-            exit('Esc clicked!')
+def train(solver):
+    for i in range(20):
+        total_loss, data_loss, reg_term, _ = solver.train()
 
-    # model = ResNet18(decode_img_shape=data.decode_img_shape,
-    #                  num_classes=data.num_identities,
-    #                  data_path=data(),
-    #                  batch_size=FLAGS.batch_size,
-    #                  lr=FLAGS.learning_rate,
-    #                  weight_decay=FLAGS.weight_decay,
-    #                  total_iters=FLAGS.epoch * data.num_train_imgs,
-    #                  is_train=FLAGS.is_train,
-    #                  log_dir=log_dir,
-    #                  resize_factor=FLAGS.resize_factor)
+        if i % FLAGS.print_freq == 0:
+            msg = "Total loss: {:.3f}, data loss: {:.3f}, reg_term: {:.3f}"
+            print(msg.format(total_loss, data_loss, reg_term))
+
 
 
 if __name__ == '__main__':
