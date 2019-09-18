@@ -32,6 +32,7 @@ class ResNet18(object):
 
         self._build_graph()
         self._eval_graph()
+        self._best_metrices_record()
         self._init_tensorboard()
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
@@ -43,6 +44,8 @@ class ResNet18(object):
         # Network forward for training
         self.pred_train = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
         self.pred_train_cls = tf.math.argmax(self.pred_train, axis=-1)
+        self.batch_acc = 100. * tf.math.reduce_mean(
+            tf.dtypes.cast(tf.math.equal(self.pred_train_cls, tf.squeeze(self.gt_tfph)), tf.dtypes.float32))
 
         # Data loss
         self.data_loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
@@ -73,14 +76,24 @@ class ResNet18(object):
         # Define initializer to initialie/reset running variables
         self.running_vars_initializer = tf.compat.v1.variables_initializer(var_list=running_vars)
 
-    def _init_tensorboard(self):
-        self.tb_total = tf.summary.scalar('Loss/total_loss', self.total_loss)
-        self.tb_data = tf.summary.scalar('Loss/data_loss', self.data_loss)
-        self.tb_reg = tf.summary.scalar('Loss/reg_term', self.reg_term)
-        self.summary_op = tf.summary.merge(inputs=[self.tb_total, self.tb_data, self.tb_reg, self.tb_lr])
+    def _best_metrices_record(self):
+        self.best_acc_tfph = tf.compat.v1.placeholder(tf.float32, name='best_acc')
 
-        self.tb_accuracy = tf.summary.scalar('Acc/accuracy', self.accuracy_metric * 100.)
-        self.metric_summary_op = tf.summary.merge(inputs=[self.tb_accuracy])
+        # Best accuracy variable
+        self.best_acc = tf.compat.v1.get_variable(name='best_acc', dtype=tf.float32, initializer=tf.constant(0.),
+                                                  trainable=False)
+        self.assign_best_acc = tf.compat.v1.assign(self.best_acc, value=self.best_acc_tfph)
+
+    def _init_tensorboard(self):
+        self.tb_total = tf.compat.v1.summary.scalar('Loss/total_loss', self.total_loss)
+        self.tb_data = tf.compat.v1.summary.scalar('Loss/data_loss', self.data_loss)
+        self.tb_reg = tf.compat.v1.summary.scalar('Loss/reg_term', self.reg_term)
+        self.tb_batch_acc = tf.compat.v1.summary.scalar('Acc/batch_acc', self.batch_acc)
+        self.summary_op = tf.compat.v1.summary.merge(
+            inputs=[self.tb_total, self.tb_data, self.tb_reg, self.tb_lr, self.tb_batch_acc])
+
+        self.tb_accuracy = tf.compat.v1.summary.scalar('Acc/val_acc', self.accuracy_metric * 100.)
+        self.metric_summary_op = tf.compat.v1.summary.merge(inputs=[self.tb_accuracy])
 
     def init_optimizer(self, loss, name='Adam'):
         with tf.compat.v1.variable_scope(name):

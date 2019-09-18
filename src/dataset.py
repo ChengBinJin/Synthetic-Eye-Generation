@@ -34,6 +34,7 @@ class Dataset(object):
             self.logger.info('Input img shape: \t\t{}'.format(self.input_img_shape))
             self.logger.info('Resize_factor: \t\t{}'.format(self.resize_factor))
 
+
     def _read_img_path(self):
         self.train_paths = utils.all_files_under(self.train_folder)
         self.val_paths = utils.all_files_under(self.val_folder)
@@ -42,13 +43,22 @@ class Dataset(object):
         self.num_val_imgs = len(self.val_paths)
         self.num_test_imgs = len(self.test_paths)
 
-    def train_batch(self, batch_size):
-        # Test eval function
+
+    def train_random_batch(self, batch_size):
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
+        train_imgs, train_labels = self.read_data(img_paths)
+        return train_imgs, train_labels
+
+
+    def train_batch(self, batch_size, index):
+        if index + batch_size < self.num_train_imgs:
+            img_paths = self.train_paths[index:index + batch_size]
+        else:
+            img_paths = self.train_paths[index:]
 
         train_imgs, train_labels = self.read_data(img_paths)
-
         return train_imgs, train_labels
+
 
     def val_batch(self, batch_size, index):
         if index + batch_size < self.num_val_imgs:
@@ -57,8 +67,18 @@ class Dataset(object):
             img_paths = self.val_paths[index:]
 
         val_imgs, val_labels = self.read_data(img_paths)
-
         return val_imgs, val_labels
+
+
+    def test_batch(self, batch_size, index):
+        if index + batch_size < self.num_test_imgs:
+            img_paths = self.test_paths[index:index+batch_size]
+        else:
+            img_paths = self.test_paths[index:]
+
+        test_imgs, test_labels = self.read_data(img_paths)
+        return test_imgs, test_labels
+
 
     def read_data(self, img_paths):
         batch_imgs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
@@ -72,6 +92,7 @@ class Dataset(object):
             batch_labels[i] = self.convert_to_cls(img_path)
 
         return batch_imgs, batch_labels
+
 
     @staticmethod
     def convert_to_cls(img_name):

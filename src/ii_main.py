@@ -52,7 +52,7 @@ def print_main_parameters(logger, flags, is_train=False):
         print('-- is_train: \t\t\t{}'.format(flags.is_train))
         print('-- learning_rate: \t\t{}'.format(flags.learning_rate))
         print('-- weight_decay: \t\t{}'.format(flags.weight_decay))
-        print('-- epoch: {}'.format(flags.epoch))
+        print('-- epoch: \t\t\t{}'.format(flags.epoch))
         print('-- print_freq: \t\t\t{}'.format(flags.print_freq))
         print('-- load_model: \t\t\t{}'.format(flags.load_model))
 
@@ -105,7 +105,7 @@ def train(solver, saver, logger ,model_dir, log_dir):
 
     if FLAGS.load_model is not None:
         flag, iter_time, best_acc = load_model(
-            saver=saver, solver=solver, logger=logger, model_dir=model_dir, is_train=True)
+            saver=saver, solver=solver, model_dir=model_dir, logger=logger, is_train=True)
 
         if flag is True:
             logger.info(' [!] Load Success! Iter: {}'.format(iter_time))
@@ -117,7 +117,7 @@ def train(solver, saver, logger ,model_dir, log_dir):
     tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
     while iter_time < total_iters:
-        total_loss, data_loss, reg_term, summary = solver.train()
+        total_loss, data_loss, reg_term, batch_acc, summary = solver.train()
 
         # Write to tensorboard
         tb_writer.add_summary(summary, iter_time)
@@ -125,8 +125,8 @@ def train(solver, saver, logger ,model_dir, log_dir):
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Total loss: {2:.3f}, Data loss: {3:.3f}, Reg. term: {4:.3f}"
-            print(msg.format(iter_time, total_iters, total_loss, data_loss, reg_term))
+            msg = "[{0:6} / {1:6}] Total loss: {2:.3f}, Data loss: {3:.3f}, Reg. term: {4:.3f}, Batch acc.: {5:.2f}%"
+            print(msg.format(iter_time, total_iters, total_loss, data_loss, reg_term, batch_acc))
 
         # Evaluate models using validation dataset
         if (iter_time % eval_iters == 0) or (iter_time + 1 == total_iters):
@@ -134,22 +134,38 @@ def train(solver, saver, logger ,model_dir, log_dir):
 
             if best_acc < acc:
                 best_acc = acc
-                # TODO: solver.set_best_acc(best_acc)
-                # TODO: save_model(saver, solver, logger, model_dir, iter_time, best_acc)
+                solver.set_best_acc(best_acc)
+                save_model(saver, solver, logger, model_dir, iter_time, best_acc)
 
-            print("\n")
-            print("*" * 70)
-            print('Acc.:      {:.3f} - Best Acc.:      {:.3f}'.format(acc, best_acc))
-            print("*" * 70)
+            print('Acc.:      {:.3f}%   - Best Acc.:      {:.3f}%'.format(acc, best_acc))
 
         iter_time += 1
 
+    # Test on train, val, and test dataset using the best model
+    test(solver, saver, model_dir)
+
 
 def test(solver, saver, model_dir):
-    print("Hello test!")
+    flag, iter_time, best_acc = load_model(saver, solver, model_dir, is_train=False)
+
+    if flag is True:
+        print(' [!] Load Success! Iter: {}'.format(iter_time))
+        print('Best Acc.: {:.3f}'.format(best_acc))
+    else:
+        exit(' [!] Failed to restore model {}'.format(FLAGS.load_model))
+
+    accuracy = solver.test()
+    print("Train accuracy:  {:.3f}%".format(accuracy[0]))
+    print("Val accuracy:    {:.3f}%".format(accuracy[1]))
+    print("Test accuracy:   {:.3f}%".format(accuracy[2]))
 
 
-def load_model(saver, solver, logger, model_dir, is_train=False):
+def save_model(saver, solver, logger, model_dir, iter_time, best_acc):
+    saver.save(solver.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
+    logger.info('[*] Model saved! Iter: {}, Best Acc. {:.3f}'.format(iter_time, best_acc))
+
+
+def load_model(saver, solver, model_dir, logger=None, is_train=False):
     if is_train:
         logger.info(' [*] Reading checkpoint...')
     else:
