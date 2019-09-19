@@ -42,14 +42,14 @@ class ResNet18(object):
         self.train_mode = tf.compat.v1.placeholder(dtype=tf.dtypes.bool, name='train_mode_ph')
 
         # Network forward for training
-        self.pred_train = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
-        self.pred_train_cls = tf.math.argmax(self.pred_train, axis=-1)
+        self.preds = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
+        self.preds_cls = tf.math.argmax(self.preds, axis=-1)
         self.batch_acc = 100. * tf.math.reduce_mean(
-            tf.dtypes.cast(tf.math.equal(self.pred_train_cls, tf.squeeze(self.gt_tfph)), tf.dtypes.float32))
+            tf.dtypes.cast(tf.math.equal(self.preds_cls, tf.squeeze(self.gt_tfph)), tf.dtypes.float32))
 
         # Data loss
         self.data_loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
-            logits=self.pred_train,
+            logits=self.preds,
             labels=self.convert_one_hot(self.gt_tfph)))
 
         # Regularization term
@@ -68,7 +68,7 @@ class ResNet18(object):
         # Calculate accuracy using TensorFlow
         with tf.compat.v1.name_scope('Metrics'):
             self.accuracy_metric, self.accuracy_metric_update = tf.compat.v1.metrics.accuracy(
-                labels=tf.squeeze(self.gt_tfph, axis=-1), predictions=self.pred_train_cls)
+                labels=tf.squeeze(self.gt_tfph, axis=-1), predictions=self.preds_cls)
 
         # Isolate the variables stored behind the scens by the metric operation
         running_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.LOCAL_VARIABLES, scope='Metrics')
@@ -117,7 +117,7 @@ class ResNet18(object):
         return learn_step
 
 
-    def forward_network(self, input_img, padding='SAME', reuse=False):
+    def forward_network(self, input_img, reuse=False):
         with tf.compat.v1.variable_scope(self.name, reuse=reuse):
             tf_utils.print_activations(input_img, logger=self.logger)
             inputs = self.conv2d_fixed_padding(inputs=input_img, filters=64, kernel_size=7, strides=2, name='conv1')

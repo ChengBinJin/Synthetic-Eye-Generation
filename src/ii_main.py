@@ -7,7 +7,6 @@
 # --------------------------------------------------------------------------
 import os
 import logging
-import cv2
 import numpy as np
 from datetime import datetime
 import tensorflow as tf
@@ -26,8 +25,8 @@ tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
 tf.flags.DEFINE_float('learning_rate', 1e-3, 'initial learning rate for optimizer, default: 0.001')
 tf.flags.DEFINE_float('weight_decay', 1e-4, 'weight decay for model to handle overfitting, default: 0.0001')
-tf.flags.DEFINE_integer('epoch', 5, 'number of iters, default: 1')
-tf.flags.DEFINE_integer('print_freq', 5, 'print frequence for loss information, default: 50')
+tf.flags.DEFINE_integer('epoch', 100, 'number of iters, default: 100')
+tf.flags.DEFINE_integer('print_freq', 10, 'print frequence for loss information, default: 10')
 tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish to continue training '
                                            '(e.g. 20190806-234308), default: None')
 

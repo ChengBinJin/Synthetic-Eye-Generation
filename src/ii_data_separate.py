@@ -13,7 +13,7 @@ train_folder = '../../Data/OpenEDS/Identification/train'
 val_folder = '../../Data/OpenEDS/Identification/val'
 test_folder = '../../Data/OpenEDS/Identification/test'
 
-def main(data_path, num_threshold=30):
+def main(data_path, num_threshold=30, num_tests=20, num_vals=10):
     files = all_files_under(data_path)
 
     for id_ in range(111, 234, 1):
@@ -34,17 +34,17 @@ def main(data_path, num_threshold=30):
             candidate_paths = sorted(candidate_paths)
 
             # Save test images
-            for img_path in candidate_paths[:10]:
+            for img_path in candidate_paths[:num_tests]:
                 canvas = convert_rgb_img(cv2.imread(img_path, cv2.IMREAD_GRAYSCALE))
                 cv2.imwrite(img_path.replace('backup', 'test'), canvas)
 
             # Save val images
-            for img_path in candidate_paths[10:20]:
+            for img_path in candidate_paths[num_tests:num_tests + num_vals]:
                 canvas = convert_rgb_img(cv2.imread(img_path, cv2.IMREAD_GRAYSCALE))
                 cv2.imwrite(img_path.replace('backup', 'val'), canvas)
 
             # Save train images
-            for img_path in candidate_paths[20:]:
+            for img_path in candidate_paths[num_tests + num_vals:]:
                 canvas = convert_rgb_img(cv2.imread(img_path, cv2.IMREAD_GRAYSCALE))
                 cv2.imwrite(img_path.replace('backup', 'train'), canvas)
 

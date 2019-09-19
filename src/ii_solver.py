@@ -51,7 +51,7 @@ class Solver(object):
         self.sess.run(self.model.running_vars_initializer)
 
         for i, index in enumerate(range(0, self.data.num_val_imgs, self.batch_size)):
-            print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // self.batch_size) + 1))
+            # print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // self.batch_size) + 1))
 
             img_vals, cls_vals = self.data.val_batch(batch_size=self.batch_size, index=index)
 
@@ -95,6 +95,7 @@ class Solver(object):
                     self.model.train_mode: False
                 }
 
+                # self.sess.run(self.model.accuracy_metric_update, feed_dict=feed)
                 self.sess.run(self.model.accuracy_metric_update, feed_dict=feed)
 
             # Calculate the accuracy
