@@ -5,7 +5,7 @@ import numpy as np
 import utils as utils
 
 class Dataset(object):
-    def __init__(self, name='Identification', mode=1, resize_factor=0.5, img_shape=(640, 400, 1), is_train=True,
+    def __init__(self, name='Identification', mode=1, resize_factor=0.5, img_shape=(640, 400, 1), is_train=False,
                  log_dir=None, is_debug=False):
         self.name = name
         self.mode = mode

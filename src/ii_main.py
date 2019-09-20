@@ -98,7 +98,7 @@ def main(_):
     if FLAGS.is_train is True:
         train(solver, saver, logger, model_dir, log_dir)
     else:
-        test(solver, saver, model_dir)
+        test(solver, saver, model_dir, log_dir)
 
 
 def train(solver, saver, logger ,model_dir, log_dir):
@@ -146,10 +146,6 @@ def train(solver, saver, logger ,model_dir, log_dir):
         iter_time += 1
 
     # Test on train, val, and test dataset using the best model
-    test(solver, saver, model_dir)
-
-
-def test(solver, saver, model_dir):
     flag, iter_time, best_acc = load_model(saver, solver, model_dir, is_train=False)
 
     if flag is True:
@@ -162,6 +158,18 @@ def test(solver, saver, model_dir):
     print("Train accuracy:  {:.2f}%".format(accuracy[0]))
     print("Val accuracy:    {:.2f}%".format(accuracy[1]))
     print("Test accuracy:   {:.2f}%".format(accuracy[2]))
+
+
+def test(solver, saver, model_dir, log_dir):
+    flag, iter_time, best_acc = load_model(saver, solver, model_dir, is_train=False)
+
+    if flag is True:
+        print(' [!] Load Success! Iter: {}'.format(iter_time))
+        print('Best Acc.: {:.3f}'.format(best_acc))
+    else:
+        exit(' [!] Failed to restore model {}'.format(FLAGS.load_model))
+
+    solver.test_top_k(log_dir)
 
 
 def save_model(saver, solver, logger, model_dir, iter_time, best_acc):

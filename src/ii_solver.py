@@ -5,6 +5,7 @@
 # Written by Cheng-Bin Jin
 # Email: sbkim0407@gmail.com
 # --------------------------------------------------------------------------
+import os
 import numpy as np
 import tensorflow as tf
 
@@ -101,6 +102,25 @@ class Solver(object):
             accuracy[i] = self.sess.run(self.model.accuracy_metric) * 100.
 
         return accuracy
+
+    def test_top_k(self, log_dir):
+        preds = np.zeros((self.data.num_test_imgs, self.data.num_identities), np.float32)
+
+        for i, index in enumerate(range(0, self.data.num_test_imgs, self.batch_size)):
+            print('[{}/{}] processing...'.format(i + 1, (self.data.num_test_imgs // self.batch_size) + 1))
+
+            img_vals, cls_vals = self.data.direct_batch(batch_size=self.batch_size, index=index, stage='test')
+            num_imgs = img_vals.shape[0]
+
+            feed = {
+                self.model.img_tfph: img_vals,
+                self.model.gt_tfph: cls_vals,
+                self.model.train_mode: False
+            }
+
+            preds[index:index + num_imgs, :] = self.sess.run(self.model.preds, feed_dict=feed)
+
+        np.savetxt(os.path.join(log_dir, 'preds.csv'), preds, delimiter=",")
 
     def set_best_acc(self, best_acc):
         self.sess.run(self.model.assign_best_acc, feed_dict={self.model.best_acc_tfph: best_acc})
