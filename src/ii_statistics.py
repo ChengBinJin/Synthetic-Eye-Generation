@@ -57,7 +57,6 @@ def draw_fig(data, save_dir='../debug'):
     plt.close()
 
 
-
 if __name__ == '__main__':
     path = '../../Data/OpenEDS/Identification/backup'
     main(path)
