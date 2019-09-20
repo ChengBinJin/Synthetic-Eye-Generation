@@ -1,16 +1,25 @@
+import os
 import logging
 import cv2
 import numpy as np
 import utils as utils
 
 class Dataset(object):
-    def __init__(self, name='Identification', resize_factor=0.5, img_shape=(640, 400, 1), is_train=True, log_dir=None):
+    def __init__(self, name='Identification', mode=1, resize_factor=0.5, img_shape=(640, 400, 1), is_train=True,
+                 log_dir=None, is_debug=False):
         self.name = name
+        self.mode = mode
         self.resize_factor = resize_factor
         self.num_identities = 122
         self.img_shape = img_shape
-        self.input_img_shape = (int(self.resize_factor * img_shape[0]),
+        if self.mode == 0:      # e.g. (320, 200, 1)
+            self.input_img_shape = (int(self.resize_factor * img_shape[0]),
                                 int(self.resize_factor * img_shape[1]), img_shape[2])
+        elif self.mode == 1:    # e.g. (200, 200, 1)
+            self.input_img_shape = (int(self.resize_factor * img_shape[1]),
+                                    int(self.resize_factor * img_shape[1]), img_shape[2])
+        else:
+            raise NotImplementedError
 
         self.train_folder = '../../Data/OpenEDS/Identification/train'
         self.val_folder = '../../Data/OpenEDS/Identification/val'
@@ -34,6 +43,8 @@ class Dataset(object):
             self.logger.info('Input img shape: \t\t{}'.format(self.input_img_shape))
             self.logger.info('Resize_factor: \t\t{}'.format(self.resize_factor))
 
+        if self.mode == 1 & is_debug:
+            self.debug_iris_cropping(num_try=5, save_dir='../debug')
 
     def _read_img_path(self):
         self.train_paths = utils.all_files_under(self.train_folder)
@@ -43,42 +54,77 @@ class Dataset(object):
         self.num_val_imgs = len(self.val_paths)
         self.num_test_imgs = len(self.test_paths)
 
+    def debug_iris_cropping(self, num_try, save_dir):
+        if not os.path.isdir(save_dir):
+            os.makedirs(save_dir)
+
+        # Random select img paths
+        img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=num_try)]
+        utils.debug_iris_cropping(img_paths, save_dir)
 
     def train_random_batch(self, batch_size):
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
-        train_imgs, train_labels = self.read_data(img_paths)
+
+        if self.mode == 0:
+            train_imgs, train_labels = self.read_data(img_paths)
+        elif self.mode == 1:
+            train_imgs, train_labels = self.read_iris_data(img_paths)
+        else:
+            raise NotImplementedError
+
         return train_imgs, train_labels
 
-
-    def train_batch(self, batch_size, index):
-        if index + batch_size < self.num_train_imgs:
-            img_paths = self.train_paths[index:index + batch_size]
+    def direct_batch(self, batch_size, index, stage='train'):
+        if stage == 'train':
+            num_imgs = self.num_train_imgs
+            all_paths = self.train_paths
+        elif stage == 'val':
+            num_imgs = self.num_val_imgs
+            all_paths = self.val_paths
+        elif stage == 'test':
+            num_imgs = self.num_test_imgs
+            all_paths = self.test_paths
         else:
-            img_paths = self.train_paths[index:]
+            raise NotImplementedError
 
-        train_imgs, train_labels = self.read_data(img_paths)
-        return train_imgs, train_labels
-
-
-    def val_batch(self, batch_size, index):
-        if index + batch_size < self.num_val_imgs:
-            img_paths = self.val_paths[index:index+batch_size]
+        if index + batch_size < num_imgs:
+            img_paths = all_paths[index:index + batch_size]
         else:
-            img_paths = self.val_paths[index:]
+            img_paths = all_paths[index:]
 
-        val_imgs, val_labels = self.read_data(img_paths)
-        return val_imgs, val_labels
-
-
-    def test_batch(self, batch_size, index):
-        if index + batch_size < self.num_test_imgs:
-            img_paths = self.test_paths[index:index+batch_size]
+        if self.mode == 0:
+            imgs, labels = self.read_data(img_paths)
+        elif self.mode == 1:
+            imgs, labels = self.read_iris_data(img_paths)
         else:
-            img_paths = self.test_paths[index:]
+            raise NotImplementedError
 
-        test_imgs, test_labels = self.read_data(img_paths)
-        return test_imgs, test_labels
+        return imgs, labels
 
+    def read_iris_data(self, img_paths, margin=5):
+        batch_imgs = np.zeros((len(img_paths), self.input_img_shape[1], self.input_img_shape[1], 1), dtype=np.float32)
+        batch_labels = np.zeros((len(img_paths), 1), dtype=np.uint8)
+
+        for i, img_path in enumerate(img_paths):
+            mask = np.zeros((self.img_shape[0], self.img_shape[1]), dtype=np.uint8)
+
+            # Extract Iris part
+            img_combine = cv2.imread(img_path)
+            img = img_combine[:, :self.img_shape[1], 1]
+            mask[img_combine[:, self.img_shape[1]:, 1] == 204] = 1
+            img = img * mask
+
+            # Cropping iris part
+            x, y, w, h = cv2.boundingRect(mask)
+            new_x = np.maximum(0, x - margin)
+            new_y = np.maximum(0, y - margin)
+            crop_img = img[new_y:new_y + h + margin, new_x:new_x + w + margin]  # Extract more bigger area
+
+            # Padding to the required size by preserving ratio of height and width
+            batch_imgs[i, :, :, 0] = utils.padding(crop_img)
+            batch_labels[i] = self.convert_to_cls(img_path)
+
+        return batch_imgs, batch_labels
 
     def read_data(self, img_paths):
         batch_imgs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)

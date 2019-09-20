@@ -6,6 +6,7 @@
 # Email: sbkim0407@gmail.com
 # --------------------------------------------------------------------------
 import os
+import cv2
 import logging
 import numpy as np
 from datetime import datetime
@@ -19,7 +20,8 @@ from ii_solver import Solver
 
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_string('gpu_index', '0', 'gpu index if you have multiple gpus, default: 0')
-tf.flags.DEFINE_integer('batch_size', 128, 'batch size for one iteration, default: 256')
+tf.flags.DEFINE_integer('mode', 1, '0 for whole image, 1 for iris part, default: 1')
+tf.flags.DEFINE_integer('batch_size', 256, 'batch size for one iteration, default: 256')
 tf.flags.DEFINE_float('resize_factor', 0.5, 'resize the original input image, default: 0.5')
 tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
@@ -34,6 +36,7 @@ tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish 
 def print_main_parameters(logger, flags, is_train=False):
     if is_train:
         logger.info('gpu_index: \t\t\t{}'.format(flags.gpu_index))
+        logger.info('mode: \t\t\t{}'.format(flags.mode))
         logger.info('batch_size: \t\t\t{}'.format(flags.batch_size))
         logger.info('resize_factor: \t\t{}'.format(flags.resize_factor))
         logger.info('dataset: \t\t\t{}'.format(flags.dataset))
@@ -45,6 +48,7 @@ def print_main_parameters(logger, flags, is_train=False):
         logger.info('load_model: \t\t\t{}'.format(flags.load_model))
     else:
         print('-- gpu_index: \t\t\t{}'.format(flags.gpu_index))
+        print('-- mode: \t\t\t{}'.format(flags.mode))
         print('-- batch_size: \t\t\t{}'.format(flags.batch_size))
         print('-- resize_factor: \t\t{}'.format(flags.resize_factor))
         print('-- dataset: \t\t\t{}'.format(flags.dataset))
@@ -75,7 +79,8 @@ def main(_):
     print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
 
     # Initialize dataset
-    data = Dataset(is_train=FLAGS.is_train, log_dir=log_dir)
+    data = Dataset(is_train=FLAGS.is_train, log_dir=log_dir, mode=FLAGS.mode, is_debug=False)
+
     # Initialize model
     model = ResNet18(input_img_shape=data.input_img_shape,
                      num_classes=data.num_identities,
@@ -124,10 +129,10 @@ def train(solver, saver, logger ,model_dir, log_dir):
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Total loss: {2:.3f}, Data loss: {3:.3f}, Reg. term: {4:.3f}, Batch acc.: {5:.2f}%"
+            msg = "[{0:5} / {1:5}] Total loss: {2:.3f}, Data loss: {3:.3f}, Reg. term: {4:.3f}, Batch acc.: {5:.2f}%"
             print(msg.format(iter_time, total_iters, total_loss, data_loss, reg_term, batch_acc))
 
-        # Evaluate models using validation dataset
+        # # Evaluate models using validation dataset
         if (iter_time % eval_iters == 0) or (iter_time + 1 == total_iters):
             acc = solver.eval(tb_writer, iter_time)
 
@@ -154,9 +159,9 @@ def test(solver, saver, model_dir):
         exit(' [!] Failed to restore model {}'.format(FLAGS.load_model))
 
     accuracy = solver.test()
-    print("Train accuracy:  {:.3f}%".format(accuracy[0]))
-    print("Val accuracy:    {:.3f}%".format(accuracy[1]))
-    print("Test accuracy:   {:.3f}%".format(accuracy[2]))
+    print("Train accuracy:  {:.2f}%".format(accuracy[0]))
+    print("Val accuracy:    {:.2f}%".format(accuracy[1]))
+    print("Test accuracy:   {:.2f}%".format(accuracy[2]))
 
 
 def save_model(saver, solver, logger, model_dir, iter_time, best_acc):

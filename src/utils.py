@@ -1,4 +1,5 @@
 import os
+import cv2
 import logging
 import numpy as np
 
@@ -69,3 +70,48 @@ def make_folders_simple(is_train=True, cur_time=None, subfolder=None):
         os.makedirs(log_dir)
 
     return model_dir, log_dir
+
+
+def debug_iris_cropping(img_paths, save_dir, h=640, w=400):
+    for i, img_path in enumerate(img_paths):
+        canvas = np.zeros((h, 3 * w, 3), dtype=np.uint8)
+        mask = np.zeros((h, w), dtype=np.uint8)
+        img_combine = cv2.imread(img_path)
+
+        # Eye img
+        img = img_combine[:, :w, :]
+        # Seg img
+        seg = img_combine[:, w:, :]
+        # Seg iris img
+        mask[seg[:, :, 1] == 204] = 1
+        # Cropped iris img
+        crop_img = img * np.expand_dims(mask, axis=2)
+
+        canvas[:, :w, :] = img
+        canvas[:, w:2 * w, :] = seg
+        canvas[:, 2 * w:3 * w, :] = crop_img
+
+        # Save img
+        cv2.imwrite(os.path.join(save_dir, os.path.basename(img_path)), canvas)
+
+
+def padding(img, shape=(200, 200)):
+    tmp = np.zeros(shape, dtype=np.float32)
+    h, w = img.shape
+
+    if h <= w:
+        factor = tmp.shape[1] / w
+        re_h = int(factor * h)
+        img = cv2.resize(img, (tmp.shape[1], re_h))
+
+        start_h = int(0.5 * (tmp.shape[0] - re_h))
+        tmp[start_h:start_h+re_h, :] = img
+    else:
+        factor = tmp.shape[0] / h
+        re_w = int(factor * w)
+        img = cv2.resize(img, (re_w, tmp.shape[0]))
+
+        start_w = int(0.5 * (tmp.shape[1] - re_w))
+        tmp[:, start_w:start_w + re_w] = img
+
+    return tmp

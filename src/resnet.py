@@ -218,4 +218,5 @@ class ResNet18(object):
 
     @staticmethod
     def normalize(data):
-        return data / 127.5 - 1.0
+        # return data / 127.5 - 1.0
+        return data - 127.5

@@ -51,9 +51,9 @@ class Solver(object):
         self.sess.run(self.model.running_vars_initializer)
 
         for i, index in enumerate(range(0, self.data.num_val_imgs, self.batch_size)):
-            # print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // self.batch_size) + 1))
+            print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // self.batch_size) + 1))
 
-            img_vals, cls_vals = self.data.val_batch(batch_size=self.batch_size, index=index)
+            img_vals, cls_vals = self.data.direct_batch(batch_size=self.batch_size, index=index, stage='val')
 
             feed = {
                 self.model.img_tfph: img_vals,
@@ -75,10 +75,9 @@ class Solver(object):
     def test(self):
         stage_list = ['train', 'val', 'test']
         num_imgs_list = [self.data.num_train_imgs, self.data.num_val_imgs, self.data.num_test_imgs]
-        sample_fn_list = [self.data.train_batch, self.data.val_batch, self.data.test_batch]
         accuracy = np.zeros(len(stage_list), np.float32)
 
-        for i, (stage, num_imgs, sample_fn) in enumerate(zip(stage_list, num_imgs_list, sample_fn_list)):
+        for i, (stage, num_imgs) in enumerate(zip(stage_list, num_imgs_list)):
             print(' [*] Evaluate on the {} dataset...'.format(stage))
 
             # Initialize/reset the running variables
@@ -87,7 +86,7 @@ class Solver(object):
             for j, index in enumerate(range(0, num_imgs, self.batch_size)):
                 print('[{}/{}] processing...'.format(j + 1, (num_imgs // self.batch_size) + 1))
 
-                img_vals, cls_vals = sample_fn(batch_size=self.batch_size, index=index)
+                img_vals, cls_vals = self.data.direct_batch(batch_size=self.batch_size, index=index, stage=stage)
 
                 feed = {
                     self.model.img_tfph: img_vals,
