@@ -6,7 +6,7 @@
 # Email: sbkim0407@gmail.com
 # --------------------------------------------------------------------------
 import os
-import cv2
+# import cv2
 import matplotlib.pyplot as plt
 from utils import all_files_under
 
