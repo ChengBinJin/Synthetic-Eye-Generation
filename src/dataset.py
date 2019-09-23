@@ -44,7 +44,7 @@ class Dataset(object):
             self.logger.info('Resize_factor: \t\t{}'.format(self.resize_factor))
 
         if self.mode == 1 & is_debug:
-            self.debug_iris_cropping(num_try=5, save_dir='../debug')
+            self.debug_iris_cropping(num_try=8, save_dir='../debug')
 
     def _read_img_path(self):
         self.train_paths = utils.all_files_under(self.train_folder)
@@ -68,7 +68,7 @@ class Dataset(object):
         if self.mode == 0:
             train_imgs, train_labels = self.read_data(img_paths)
         elif self.mode == 1:
-            train_imgs, train_labels = self.read_iris_data(img_paths)
+            train_imgs, train_labels = self.read_iris_data(img_paths, is_augment=True)
         else:
             raise NotImplementedError
 
@@ -95,30 +95,38 @@ class Dataset(object):
         if self.mode == 0:
             imgs, labels = self.read_data(img_paths)
         elif self.mode == 1:
-            imgs, labels = self.read_iris_data(img_paths)
+            imgs, labels = self.read_iris_data(img_paths, is_augment=False)
         else:
             raise NotImplementedError
 
         return imgs, labels
 
-    def read_iris_data(self, img_paths, margin=5):
+    def read_iris_data(self, img_paths, margin=5, is_augment=False):
         batch_imgs = np.zeros((len(img_paths), self.input_img_shape[1], self.input_img_shape[1], 1), dtype=np.float32)
         batch_labels = np.zeros((len(img_paths), 1), dtype=np.uint8)
 
         for i, img_path in enumerate(img_paths):
-            mask = np.zeros((self.img_shape[0], self.img_shape[1]), dtype=np.uint8)
+            mask = np.zeros((self.img_shape[0], self.img_shape[1], 3), dtype=np.uint8)
 
             # Extract Iris part
             img_combine = cv2.imread(img_path)
-            img = img_combine[:, :self.img_shape[1], 1]
-            mask[img_combine[:, self.img_shape[1]:, 1] == 204] = 1
-            img = img * mask
+            img = img_combine[:, :self.img_shape[1], :]
+            seg = img_combine[:, self.img_shape[1]:, :]
+
+            if is_augment is True:
+                # Data augmentation: random brightness + random rotation
+                img_aug, seg_aug = utils.data_augmentation(img, seg)
+                mask[:, :, :][seg_aug[:, :, 1] == 204] = 1
+                img = img_aug * mask
+            else:
+                mask[:, :, :][seg[:, :, 1] == 204] = 1
+                img = img * mask
 
             # Cropping iris part
-            x, y, w, h = cv2.boundingRect(mask)
+            x, y, w, h = cv2.boundingRect(mask[:, :, 1])
             new_x = np.maximum(0, x - margin)
             new_y = np.maximum(0, y - margin)
-            crop_img = img[new_y:new_y + h + margin, new_x:new_x + w + margin]  # Extract more bigger area
+            crop_img = img[new_y:new_y + h + margin, new_x:new_x + w + margin, 1]  # Extract more bigger area
 
             # Padding to the required size by preserving ratio of height and width
             batch_imgs[i, :, :, 0] = utils.padding(crop_img)

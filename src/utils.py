@@ -2,6 +2,7 @@ import os
 import cv2
 import logging
 import numpy as np
+from scipy.ndimage import rotate
 
 
 def convert_color_label(img):
@@ -72,7 +73,7 @@ def make_folders_simple(is_train=True, cur_time=None, subfolder=None):
     return model_dir, log_dir
 
 
-def debug_iris_cropping(img_paths, save_dir, h=640, w=400):
+def debug_iris_cropping(img_paths, save_dir, h=640, w=400, margin=5):
     for i, img_path in enumerate(img_paths):
         canvas = np.zeros((h, 3 * w, 3), dtype=np.uint8)
         mask = np.zeros((h, w), dtype=np.uint8)
@@ -87,12 +88,22 @@ def debug_iris_cropping(img_paths, save_dir, h=640, w=400):
         # Cropped iris img
         crop_img = img * np.expand_dims(mask, axis=2)
 
+        # Cropping iris part
+        x_, y_, w_, h_ = cv2.boundingRect(mask[:, :])
+        new_x = np.maximum(0, x_ - margin)
+        new_y = np.maximum(0, y_ - margin)
+        iris_crop_img = crop_img[new_y:new_y + h_ + margin, new_x:new_x + w_ + margin, 1]  # Extract more bigger area
+
+        # Padding to the required size by preserving ratio of height and width
+        iris_crop_img = padding(iris_crop_img)
+
         canvas[:, :w, :] = img
         canvas[:, w:2 * w, :] = seg
         canvas[:, 2 * w:3 * w, :] = crop_img
 
         # Save img
         cv2.imwrite(os.path.join(save_dir, os.path.basename(img_path)), canvas)
+        cv2.imwrite(os.path.join(save_dir, 'crop_' + os.path.basename(img_path)), iris_crop_img)
 
 
 def padding(img, shape=(200, 200)):
@@ -115,3 +126,31 @@ def padding(img, shape=(200, 200)):
         tmp[:, start_w:start_w + re_w] = img
 
     return tmp
+
+
+def brightness_augment(img, factor=0.5):
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)   # convert to hsv
+    hsv[:, :, 2] = hsv[:, :, 2] * (factor + np.random.uniform())    # scale channel V unfiromly
+    hsv[:, :, 2][hsv[:, :, 2] > 255] = 255                          # reset out of range values
+    rgb = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    return rgb
+
+
+def rotation_augment(img, label, min_degree=-30, max_degree=30):
+    # Random rotate image
+    degree = np.random.randint(low=min_degree, high=max_degree, size=None)
+    img_rotate = rotate(input=img, angle=degree, axes=(0, 1), reshape=False, order=3, mode='constant', cval=0.)
+    img_rotate = np.clip(img_rotate, a_min=0., a_max=255.)
+    label_rotate = rotate(input=label, angle=degree, axes=(0, 1), reshape=False, order=0, mode='constant', cval=0.)
+    return img_rotate.astype(np.uint8), label_rotate.astype(np.uint8)
+
+
+def data_augmentation(img, label):
+    # Random brightness
+    img_bri = brightness_augment(img)
+    label_bri = label.copy()
+
+    # Rondom rotation
+    img_bri_rota, label_bri_rota = rotation_augment(img_bri, label_bri)
+
+    return img_bri_rota, label_bri_rota

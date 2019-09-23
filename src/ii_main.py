@@ -6,7 +6,7 @@
 # Email: sbkim0407@gmail.com
 # --------------------------------------------------------------------------
 import os
-import cv2
+# import cv2
 import logging
 import numpy as np
 from datetime import datetime
@@ -27,8 +27,8 @@ tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
 tf.flags.DEFINE_float('learning_rate', 1e-3, 'initial learning rate for optimizer, default: 0.001')
 tf.flags.DEFINE_float('weight_decay', 1e-4, 'weight decay for model to handle overfitting, default: 0.0001')
-tf.flags.DEFINE_integer('epoch', 100, 'number of iters, default: 100')
-tf.flags.DEFINE_integer('print_freq', 10, 'print frequence for loss information, default: 10')
+tf.flags.DEFINE_integer('epoch', 200, 'number of iters, default: 100')
+tf.flags.DEFINE_integer('print_freq', 5, 'print frequence for loss information, default: 5')
 tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish to continue training '
                                            '(e.g. 20190806-234308), default: None')
 
@@ -105,7 +105,8 @@ def train(solver, saver, logger ,model_dir, log_dir):
     best_acc = 0.
     iter_time = 0
     total_iters = int(np.ceil(FLAGS.epoch * solver.data.num_train_imgs / FLAGS.batch_size))
-    eval_iters = int(np.ceil(solver.data.num_train_imgs / FLAGS.batch_size))
+    # eval_iters = int(np.ceil(solver.data.num_train_imgs / FLAGS.batch_size))
+    eval_iters = total_iters // 100
 
     if FLAGS.load_model is not None:
         flag, iter_time, best_acc = load_model(
