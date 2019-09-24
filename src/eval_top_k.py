@@ -34,7 +34,9 @@ def main(load_models, save_dir='../debug', num_identities=122):
 
         # Correct k == 1 accuracy
         acc = np.mean(gt_labels == np.argmax(preds, axis=1))
+        print('\n')
         print('='*30)
+        print('load model: {}'.format(load_model))
         print('K == 1: Acc. {:.2f}'.format(acc * 100.))
         print('=' * 30)
 
@@ -47,17 +49,28 @@ def main(load_models, save_dir='../debug', num_identities=122):
                     correct += 1
 
             acc = correct / num_imgs * 100.
-            print('K == {}: Acc. {:.2f}'.format(k, acc))
-
             top_k_accs[k-1, iter_] = acc
+
+            if (k == 1) or (k == 5):
+                print('K == {}: Acc. {:.2f}'.format(k, acc))
+
+        print('Model: {}, AUC: {:.4}'.format(load_model, (np.sum(top_k_accs[:, iter_] / (100. * num_identities)))))
 
     save_fig(top_k_accs, save_dir)
 
 
-def save_fig(top_k_accw, save_dir):
-    fig, ax = plt.subplots(figsize=(12, 10))
 
-    ax.plot(top_k_accw, color='dodgerblue', linewidth=2.0)
+
+def save_fig(top_k_acc, save_dir):
+    # Parameters
+    colors = ['tomato', 'lawngreen']
+    groups = ['Standard', 'Standard with data augmentation']
+    linestyles = [':', '-.']
+
+    fig, ax = plt.subplots(figsize=(16, 8))
+    for i in range(top_k_acc.shape[1]):
+        ax.plot(top_k_acc[:, i], color=colors[i], linewidth=4.0, label=groups[i], linestyle=linestyles[i])
+
     ax.set_xlabel('Rank', fontsize=16)
     ax.set_ylabel('Identification Accuracy', fontsize=16)
     ax.set_xticks(range(0, 121, 10))
@@ -71,7 +84,8 @@ def save_fig(top_k_accw, save_dir):
 
     plt.title('Cumulative Matching Characteristic (CMC) Curve', fontsize=16)
     plt.xlim(0, 121)
-    plt.ylim(65, 100)
+    plt.ylim(top_k_acc[:, 0].min(), 100)
+    plt.legend(loc='lower right', fontsize=14)
     plt.grid(True)
     fig.tight_layout()
     plt.savefig(os.path.join(save_dir, 'test.png'), dpi=600)
