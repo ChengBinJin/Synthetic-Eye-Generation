@@ -60,7 +60,35 @@ def init_logger(logger, log_dir, name, is_train):
     return logger, file_handler, stream_handler
 
 
-def make_folders_simple(is_train=True, cur_time=None, subfolder=None):
+def make_folders(is_train=True, cur_time=None, subfolder=None):
+    model_dir = os.path.join('../model', subfolder, '{}'.format(cur_time))
+    log_dir = os.path.join('../log', subfolder, '{}'.format(cur_time))
+    sample_dir = os.path.join('../sample', subfolder, '{}'.format(cur_time))
+    val_dir, test_dir = None, None
+
+    if is_train:
+        if not os.path.isdir(model_dir):
+            os.makedirs(model_dir)
+
+        if not os.path.isdir(log_dir):
+            os.makedirs(log_dir)
+
+        if not os.path.isdir(sample_dir):
+            os.makedirs(sample_dir)
+    else:
+        val_dir = os.path.join('../val', subfolder, '{}'.format(cur_time))
+        test_dir = os.path.join('../test', subfolder, '{}'.format(cur_time))
+
+        if not os.path.isdir(val_dir):
+            os.makedirs(val_dir)
+
+        if not os.path.isdir(test_dir):
+            os.makedirs(test_dir)
+
+    return model_dir, log_dir, sample_dir, val_dir, test_dir
+
+
+def make_folders_simple(cur_time=None, subfolder=None):
     model_dir = os.path.join('../model', subfolder, '{}'.format(cur_time))
     log_dir = os.path.join('../log', subfolder, '{}'.format(cur_time))
 
