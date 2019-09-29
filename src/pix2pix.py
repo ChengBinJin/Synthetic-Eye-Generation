@@ -12,10 +12,11 @@ import tensorflow_utils as tf_utils
 
 
 class Pix2pix(object):
-    def __init__(self, input_img_shape=(320, 200, 3), batch_size=1, lr=2e-4, total_iters=2e5, is_train=True,
+    def __init__(self, input_img_shape=(320, 200, 3), gen_mode=1, batch_size=1, lr=2e-4, total_iters=2e5, is_train=True,
                  log_dir=None, lambda_1=100., name='pix2pix'):
         self.input_img_shape = input_img_shape
         self.output_shape = (*self.input_img_shape[0:2], 1)
+        self.gen_mode = gen_mode
         self.is_train = is_train
         self.labmda_1 = lambda_1
         self.gen_c = [64, 128, 256, 512, 512, 512, 512, 512,

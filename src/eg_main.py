@@ -92,6 +92,7 @@ def main(_):
 
     # Initialize model
     model = Pix2pix(input_img_shape=(*data.input_img_shape[0:2], 3),
+                    gen_mode=FLAGS.gen_mode,
                     batch_size=FLAGS.batch_size,
                     lr=FLAGS.learning_rate,
                     total_iters=FLAGS.iters,
