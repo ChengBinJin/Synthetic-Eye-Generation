@@ -13,7 +13,7 @@ from datetime import datetime
 import utils as utils
 from dataset import Dataset
 from pix2pix import Pix2pix
-# from eg_solver import Solver
+from eg_solver import Solver
 
 
 FLAGS = tf.flags.FLAGS
@@ -90,18 +90,18 @@ def main(_):
     data = Dataset(name='generation', mode=0, resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
                    log_dir=log_dir,  is_debug=False)
 
-    # Initialize model
-    model = Pix2pix(input_img_shape=(*data.input_img_shape[0:2], 3),
-                    gen_mode=FLAGS.gen_mode,
-                    batch_size=FLAGS.batch_size,
-                    lr=FLAGS.learning_rate,
-                    total_iters=FLAGS.iters,
-                    is_train=FLAGS.is_train,
-                    log_dir=log_dir,
-                    lambda_1=FLAGS.lambda_1)
-
+    # # Initialize model
+    # model = Pix2pix(input_img_shape=data.input_img_shape,
+    #                 gen_mode=FLAGS.gen_mode,
+    #                 lr=FLAGS.learning_rate,
+    #                 total_iters=FLAGS.iters,
+    #                 is_train=FLAGS.is_train,
+    #                 log_dir=log_dir,
+    #                 lambda_1=FLAGS.lambda_1,
+    #                 num_class=data.num_seg_class)
+    #
     # # Initialize solver
-    # solver = Solver(model=model, data=data, is_train=FLAGS.is_train)
+    # solver = Solver(model=model, data=data, batch_size=FLAGS.batch_size)
     #
     # # Initialize saver
     # saver = tf.compat.v1.train.Saver(max_to_keep=1)
@@ -123,37 +123,22 @@ def train(solver, saver, logger, model_dir, log_dir, sample_dir):
         else:
             exit(" [!] Failed to restore model {}".format(FLAGS.load_model))
 
-    # Tensorboard writer
-    tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
+    # # Tensorboard writer
+    # tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
-    # Threads for tfrecord
-    coord = tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(sess=solver.sess, coord=coord)
+    while iter_time < FLAGS.iters:
+        gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
 
-    try:
-        while iter_time < FLAGS.iters:
-            gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
+        # # Write to tensorboard
+        # tb_writer.add_summary(summary, iter_time)
+        # tb_writer.flush()
 
-            # Write to tensorboard
-            tb_writer.add_summary(summary, iter_time)
-            tb_writer.flush()
+        if iter_time % FLAGS.print_freq == 0:
+            msg = "[{0:6} / {1:6}] G_loss:{2:.3f}, Adv_loss:{3:.3f}, Cond_loss:{4:.3f}, D_loss: {5:.3f}"
+            print(msg.format(iter_time, FLAGS.iters, gen_loss, adv_loss, cond_loss, dis_loss))
 
-            if iter_time % FLAGS.print_freq == 0:
-                msg = "[{0:6} / {1:6}] G_loss:{2:.3f}, Adv_loss:{3:.3f}, Cond_loss:{4:.3f}, D_loss: {5:.3f}"
-                print(msg.format(iter_time, FLAGS.iters, gen_loss, adv_loss, cond_loss, dis_loss))
+        iter_time += 1
 
-            iter_time += 1
-
-    except KeyboardInterrupt:
-        coord.request_stop()
-    except Exception as e:
-        coord.request_stop(e)
-    except tf.errors.OutOfRangeError:
-        coord.request_stop()
-    finally:
-        # when done, ask the threads to stop
-        coord.request_stop()
-        coord.join(threads)
 
 def test(solver, saver, model_dir, test_dir):
     print("Hello test!")

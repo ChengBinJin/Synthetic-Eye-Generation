@@ -9,9 +9,11 @@ import tensorflow as tf
 
 
 class Solver(object):
-    def __init__(self, model, data, is_train=True):
+    def __init__(self, model, data, batch_size=1):
         self.model = model
         self.data = data
+        self.batch_size = batch_size
+
         self._init_session()
         self._init_variables()
 
@@ -22,6 +24,8 @@ class Solver(object):
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def train(self):
+        img, mask, cls = self.data.eg_tran_random_batch(batch_size=self.batch_size)
+
         def feed_run():
             fake_pair = self.sess.run(self.model.fake_pair, feed_dict={self.model.rate_tfph: 0.5})
             feed = {self.model.rate_tfph: 0.5,
