@@ -25,7 +25,7 @@ tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
 tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for optimizer, default: 0.0002')
 tf.flags.DEFINE_integer('iters', 20, 'number of iterations, default: 200000')
-tf.flags.DEFINE_integer('print_freq', 2, 'print frequency for loss information, default: 50')
+tf.flags.DEFINE_integer('print_freq', 5, 'print frequency for loss information, default: 50')
 tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
 tf.flags.DEFINE_integer('sample_freq', 5, 'sample frequence for checking qualitative evaluation, default: 500')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
@@ -90,26 +90,26 @@ def main(_):
     data = Dataset(name='generation', mode=0, resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
                    log_dir=log_dir,  is_debug=False)
 
-    # # Initialize model
-    # model = Pix2pix(input_img_shape=data.input_img_shape,
-    #                 gen_mode=FLAGS.gen_mode,
-    #                 lr=FLAGS.learning_rate,
-    #                 total_iters=FLAGS.iters,
-    #                 is_train=FLAGS.is_train,
-    #                 log_dir=log_dir,
-    #                 lambda_1=FLAGS.lambda_1,
-    #                 num_class=data.num_seg_class)
-    #
-    # # Initialize solver
-    # solver = Solver(model=model, data=data, batch_size=FLAGS.batch_size)
-    #
-    # # Initialize saver
-    # saver = tf.compat.v1.train.Saver(max_to_keep=1)
-    #
-    # if FLAGS.is_train is True:
-    #     train(solver, saver, logger, model_dir, log_dir, sample_dir)
-    # else:
-    #     test(solver, saver, model_dir, test_dir)
+    # Initialize model
+    model = Pix2pix(input_img_shape=(*data.input_img_shape[0:2], 3),
+                    gen_mode=FLAGS.gen_mode,
+                    lr=FLAGS.learning_rate,
+                    total_iters=FLAGS.iters,
+                    is_train=FLAGS.is_train,
+                    log_dir=log_dir,
+                    lambda_1=FLAGS.lambda_1,
+                    num_class=data.num_seg_class)
+
+    # Initialize solver
+    solver = Solver(model=model, data=data, batch_size=FLAGS.batch_size)
+
+    # Initialize saver
+    saver = tf.compat.v1.train.Saver(max_to_keep=1)
+
+    if FLAGS.is_train is True:
+        train(solver, saver, logger, model_dir, log_dir, sample_dir)
+    else:
+        test(solver, saver, model_dir, test_dir)
 
 
 def train(solver, saver, logger, model_dir, log_dir, sample_dir):
@@ -127,15 +127,16 @@ def train(solver, saver, logger, model_dir, log_dir, sample_dir):
     # tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
     while iter_time < FLAGS.iters:
-        gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
+        # gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
+        gen_loss, adv_loss, cond_loss, dis_loss = solver.train()
 
         # # Write to tensorboard
         # tb_writer.add_summary(summary, iter_time)
         # tb_writer.flush()
 
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] G_loss:{2:.3f}, Adv_loss:{3:.3f}, Cond_loss:{4:.3f}, D_loss: {5:.3f}"
-            print(msg.format(iter_time, FLAGS.iters, gen_loss, adv_loss, cond_loss, dis_loss))
+            msg = "[{0:6} / {1:6}] Dis. loss: {2:.3f } Gen. loss:{3:.3f}, Adv. loss:{4:.3f}, Cond. loss:{5:.3f}"
+            print(msg.format(iter_time, FLAGS.iters, dis_loss, gen_loss, adv_loss, cond_loss))
 
         iter_time += 1
 

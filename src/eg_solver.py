@@ -24,21 +24,24 @@ class Solver(object):
         self.sess.run(tf.compat.v1.global_variables_initializer())
 
     def train(self):
-        img, mask, cls = self.data.eg_tran_random_batch(batch_size=self.batch_size)
-
         def feed_run():
-            fake_pair = self.sess.run(self.model.fake_pair, feed_dict={self.model.rate_tfph: 0.5})
-            feed = {self.model.rate_tfph: 0.5,
-                    self.model.fake_pair_tfph: self.model.img_pool_obj.query(fake_pair)}
+            imgs, _, segs = self.data.gen_train_random_batch(batch_size=self.batch_size)
+            feed = {self.model.img_tfph: imgs,
+                    self.model.mask_tfph: segs,
+                    self.model.rate_tfph: 0.5}
             return feed
 
         self.sess.run(self.model.dis_optim, feed_dict=feed_run())
         self.sess.run(self.model.gen_optim, feed_dict=feed_run())
 
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-        _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary = self.sess.run(
-            [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
-             self.model.dis_loss, self.model.summary_op], feed_dict=feed_run())
+        # _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary = self.sess.run(
+        #     [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
+        #      self.model.dis_loss, self.model.summary_op], feed_dict=feed_run())
 
-        return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
+        _, g_loss, g_adv_loss, g_cond_loss, d_loss = self.sess.run(
+            [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
+             self.model.dis_loss], feed_dict=feed_run())
+
+        return g_loss, g_adv_loss, g_cond_loss, d_loss
 

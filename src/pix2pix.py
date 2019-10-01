@@ -15,7 +15,7 @@ class Pix2pix(object):
     def __init__(self, input_img_shape=(320, 200, 1), gen_mode=1, lr=2e-4, total_iters=2e5, is_train=True,
                  log_dir=None, lambda_1=100., num_class=4, name='pix2pix'):
         self.input_img_shape = input_img_shape
-        self.output_img_shape = self.input_img_shape
+        self.output_img_shape = (*self.input_img_shape[0:2], 1)
         self.gen_mode = gen_mode
         self.is_train = is_train
         self.labmda_1 = lambda_1
@@ -50,7 +50,7 @@ class Pix2pix(object):
         self.dis_obj = Discriminator(name='D', dis_c=self.dis_c, norm='instance', logger=self.logger,  _ops=None)
 
         # Transform img_train and seg_img_train
-        input_mask = self.transform_mask(self.mask_tfph)
+        input_mask = self.transform_img(self.mask_tfph)
         real_img = self.transform_img(self.img_tfph)
 
         # Concatenation
@@ -125,9 +125,9 @@ class Pix2pix(object):
 #         self.summary_op = tf.summary.merge(
 #             inputs=[self.tb_gen_loss, self.tb_adv_loss, self.tb_cond_loss, self.tb_dis_loss, self.tb_lr])
 #
-    def transform_mask(self, img):
-        img = img * 255. / (self.num_class - 1)
-        return img / 127.5 - 1.
+    # def transform_mask(self, img):
+    #     img = img * 255. / (self.num_class - 1)
+    #     return img / 127.5 - 1.
 
     @staticmethod
     def transform_img(img):

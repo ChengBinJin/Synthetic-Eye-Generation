@@ -64,19 +64,25 @@ class Dataset(object):
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=num_try)]
         utils.debug_iris_cropping(img_paths, save_dir)
 
+    # This function for identification
     def train_random_batch(self, batch_size):
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
 
         if self.mode == 0:
-            train_imgs, train_labels, tran_segs = self.read_data(img_paths)
-            return train_imgs, train_labels, tran_segs
+            train_imgs, train_labels, _ = self.read_data(img_paths)
         elif self.mode == 1:
             train_imgs, train_labels = self.read_iris_data(img_paths, is_augment=True)
-            return train_imgs, train_labels
         else:
             raise NotImplementedError
 
+        return train_imgs, train_labels
 
+    def gen_train_random_batch(self, batch_size):
+        img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
+        train_imgs, train_labels, train_segs = self.read_data(img_paths)
+        return train_imgs, train_labels, train_segs
+
+    # This function for identification
     def direct_batch(self, batch_size, index, stage='train'):
         if stage == 'train':
             num_imgs = self.num_train_imgs
@@ -96,14 +102,13 @@ class Dataset(object):
             img_paths = all_paths[index:]
 
         if self.mode == 0:
-            imgs, labels, segs = self.read_data(img_paths)
-            return imgs, labels, segs
+            imgs, labels, _ = self.read_data(img_paths)
         elif self.mode == 1:
             imgs, labels = self.read_iris_data(img_paths, is_augment=False)
-            return imgs, labels
         else:
             raise NotImplementedError
 
+        return imgs, labels
 
     def read_iris_data(self, img_paths, margin=5, is_augment=False):
         batch_imgs = np.zeros((len(img_paths), self.input_img_shape[1], self.input_img_shape[1], 1), dtype=np.float32)
@@ -140,21 +145,21 @@ class Dataset(object):
 
     def read_data(self, img_paths):
         batch_imgs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
-        batch_segs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
+        batch_segs = np.zeros((len(img_paths), *self.input_img_shape[0:2], 3), dtype=np.float32)
         batch_labels = np.zeros((len(img_paths), 1), dtype=np.uint8)
 
         for i, img_path in enumerate(img_paths):
             # Read img and seg
             img_combine = cv2.imread(img_path)
             img = img_combine[:, :self.img_shape[1], 1]
-            seg = img_combine[:, self.img_shape[1]:, 1]
+            seg = img_combine[:, self.img_shape[1]:, :]
 
             # Resize
             img = cv2.resize(img, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_LINEAR)
             seg = cv2.resize(seg, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_NEAREST)
 
             batch_imgs[i, :, :, 0] = img
-            batch_segs[i, :, :, 0] = seg
+            batch_segs[i, :, :, :] = seg
             batch_labels[i] = self.convert_to_cls(img_path)
 
         return batch_imgs, batch_labels, batch_segs
