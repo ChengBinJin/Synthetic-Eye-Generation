@@ -37,7 +37,7 @@ class Pix2pix(object):
         utils.init_logger(logger=self.logger, log_dir=self.log_dir, is_train=self.is_train, name=self.name)
 
         self._build_graph()         # main graph
-        # self._init_tensorboard()    # tensorboard
+        self._init_tensorboard()    # tensorboard
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
     def _build_graph(self):
@@ -54,13 +54,14 @@ class Pix2pix(object):
         real_img = self.transform_img(self.img_tfph)
 
         # Concatenation
-        self.g_sample = self.gen_obj(input_mask, self.rate_tfph)
+        fake_img = self.gen_obj(input_mask, self.rate_tfph)
+        self.g_sample = self.inv_transform_img(fake_img)
         self.real_pair = tf.concat([input_mask, real_img], axis=3)
-        self.fake_pair = tf.concat([input_mask, self.g_sample], axis=3)
+        self.fake_pair = tf.concat([input_mask, fake_img], axis=3)
 
         # Define generator loss
         self.gen_adv_loss = self.generator_loss(self.dis_obj, self.fake_pair)
-        self.cond_loss = self.conditional_loss(pred=self.g_sample, gt=real_img)
+        self.cond_loss = self.conditional_loss(pred=fake_img, gt=real_img)
         self.gen_loss = self.gen_adv_loss + self.cond_loss
 
         # Define discriminator loss
@@ -117,21 +118,22 @@ class Pix2pix(object):
         loss = 0.5 * (error_real + error_fake)
         return loss
 
-#     def _init_tensorboard(self):
-#         self.tb_gen_loss = tf.summary.scalar('loss/G_loss', self.gen_loss)
-#         self.tb_adv_loss = tf.summary.scalar('loss/adv_loss', self.gen_adv_loss)
-#         self.tb_cond_loss = tf.summary.scalar('loss/cond_loss', self.cond_loss)
-#         self.tb_dis_loss = tf.summary.scalar('loss/D_lss', self.dis_loss)
-#         self.summary_op = tf.summary.merge(
-#             inputs=[self.tb_gen_loss, self.tb_adv_loss, self.tb_cond_loss, self.tb_dis_loss, self.tb_lr])
-#
-    # def transform_mask(self, img):
-    #     img = img * 255. / (self.num_class - 1)
-    #     return img / 127.5 - 1.
+    def _init_tensorboard(self):
+        self.tb_gen_loss = tf.compat.v1.summary.scalar('loss/G_loss', self.gen_loss)
+        self.tb_adv_loss = tf.compat.v1.summary.scalar('loss/adv_loss', self.gen_adv_loss)
+        self.tb_cond_loss = tf.compat.v1.summary.scalar('loss/cond_loss', self.cond_loss)
+        self.tb_dis_loss = tf.compat.v1.summary.scalar('loss/D_lss', self.dis_loss)
+        self.summary_op = tf.compat.v1.summary.merge(
+            inputs=[self.tb_gen_loss, self.tb_adv_loss, self.tb_cond_loss, self.tb_dis_loss, self.tb_lr])
 
     @staticmethod
     def transform_img(img):
         return img / 127.5 - 1.
+
+    @staticmethod
+    def inv_transform_img(img):
+        img = (img + 1.) * 127.5
+        return img
 
 
 class Generator(object):

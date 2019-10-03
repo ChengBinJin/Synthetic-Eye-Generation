@@ -182,3 +182,32 @@ def data_augmentation(img, label):
     img_bri_rota, label_bri_rota = rotation_augment(img_bri, label_bri)
 
     return img_bri_rota, label_bri_rota
+
+
+def save_imgs(img_stores, iter_time=None, save_dir=None, margin=5, img_name=None, name_append='', is_vertical=True):
+    if not os.path.isdir(save_dir):
+        os.makedirs(save_dir)
+
+    num_categories = len(img_stores)
+    num_imgs, h, w = img_stores[0].shape[0:3]
+
+    if is_vertical:
+        canvas = np.zeros((num_categories * h + (num_categories + 1) * margin,
+                           num_imgs * w + (num_imgs + 1) * margin, 3), dtype=np.uint8)
+
+        for i in range(num_imgs):
+            for j in range(num_categories):
+                canvas[(j + 1) * margin + j * h:(j + 1) * margin + (j + 1) * h,
+                (i + 1) * margin + i * w:(i + 1) * (margin + w), :] = img_stores[j][i]
+    else:
+        canvas = np.zeros((num_imgs * h + (num_imgs + 1) * margin,
+                           num_categories * w + (num_categories + 1) * margin, 3), dtype=np.uint8)
+
+        for i in range(num_imgs):
+            for j in range(num_categories):
+                canvas[(i+1)*margin+i*h:(i+1)*(margin+h), (j+1)*margin+j*w:(j+1)*margin+(j+1)*w, :] = img_stores[j][i]
+
+    if img_name is None:
+        cv2.imwrite(os.path.join(save_dir, str(iter_time).zfill(6) + '.png'), canvas)
+    else:
+        cv2.imwrite(os.path.join(save_dir, name_append+img_name[0]), canvas)

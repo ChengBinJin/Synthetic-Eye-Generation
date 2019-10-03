@@ -30,11 +30,24 @@ class ResNet18(object):
         self.logger.setLevel(logging.INFO)
         utils.init_logger(logger=self.logger, log_dir=self.log_dir, is_train=self.is_train, name=self.name)
 
-        self._build_graph()
+        if self.is_train:
+            self._build_graph()
+            self._best_metrices_record()
+            self._init_tensorboard()
+        else:
+            self._build_test_graph()
+
         self._eval_graph()
-        self._best_metrices_record()
-        self._init_tensorboard()
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
+
+    def _build_test_graph(self):
+        self.img_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.float32, shape=[None, *self.input_img_shape])
+        self.gt_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.int64, shape=[None, 1])
+        self.train_mode = tf.compat.v1.placeholder(dtype=tf.dtypes.bool, name='train_mode_ph')
+
+        # Network forward for training
+        self.preds = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
+        self.preds_cls = tf.math.argmax(self.preds, axis=-1)
 
     def _build_graph(self):
         self.img_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.float32, shape=[None, *self.input_img_shape])

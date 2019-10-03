@@ -4,7 +4,6 @@
 # Written by Cheng-Bin Jin
 # Email: sbkim0407@gmail.com
 # -------------------------------------------------------------------------
-
 import logging
 import os
 import tensorflow as tf
@@ -12,8 +11,7 @@ from datetime import datetime
 
 import utils as utils
 from dataset import Dataset
-from pix2pix import Pix2pix
-from eg_solver import Solver
+from eg_solver import Solver, Evaluator
 
 
 FLAGS = tf.flags.FLAGS
@@ -29,9 +27,12 @@ tf.flags.DEFINE_integer('print_freq', 5, 'print frequency for loss information, 
 tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
 tf.flags.DEFINE_integer('sample_freq', 5, 'sample frequence for checking qualitative evaluation, default: 500')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
-tf.flags.DEFINE_integer('save_freq', 20000, 'save frequency for model, default: 20000')
-tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish to continue training '
-                                           '(e.g. 20190801-220902), default: None')
+tf.flags.DEFINE_integer('eval_freq', 10, 'save frequency for model, default: 10')
+tf.flags.DEFINE_string('load_gan_model', None, 'folder of saved gan_model that you wish to continue training '
+                                           '(e.g. 20191003-103205), default: None')
+tf.flags.DEFINE_string('load_iden_model', '20190921-111742',
+                       'folder of saved iden_model that you wish to continue training '
+                       '(e.g. 20190921-111742), default: None')
 
 
 def print_main_parameters(logger, flags, is_train=False):
@@ -48,8 +49,9 @@ def print_main_parameters(logger, flags, is_train=False):
         logger.info('lambda_1: \t\t\t{}'.format(flags.lambda_1))
         logger.info('sample_freq: \t\t{}'.format(flags.sample_freq))
         logger.info('sample_batch: \t\t{}'.format(flags.sample_batch))
-        logger.info('save_freq: \t\t\t{}'.format(flags.save_freq))
-        logger.info('load_model: \t\t\t{}'.format(flags.load_model))
+        logger.info('eval_freq: \t\t\t{}'.format(flags.eval_freq))
+        logger.info('load_gan_model: \t\t{}'.format(flags.load_gan_model))
+        logger.info('load_iden_model: \t\t{}'.format(flags.load_iden_model))
     else:
         print('-- gpu_index: \t\t\t{}'.format(flags.gpu_index))
         print('-- gen_mode: \t\t\t{}'.format(flags.gen_mode))
@@ -63,15 +65,16 @@ def print_main_parameters(logger, flags, is_train=False):
         print('-- lambda_1: \t\t{}'.format(flags.lambda_1))
         print('-- sample_freq: \t\t{}'.format(flags.sample_freq))
         print('-- sample_batch: \t\t{}'.format(flags.sample_batch))
-        print('-- save_freq: \t\t\t{}'.format(flags.save_freq))
-        print('-- load_model: \t\t\t{}'.format(flags.load_model))
+        print('-- eval_freq: \t\t\t{}'.format(flags.eval_freq))
+        print('-- load_gan_model: \t\t{}'.format(flags.load_gan_model))
+        print('-- load_iden_model: \t\t{}'.format(flags.load_iden_model))
 
 
 def main(_):
     os.environ["CUDA_VISIBLE_DEVICES"] = FLAGS.gpu_index
 
     # Initialize model and log folders:
-    if FLAGS.load_model is None:
+    if FLAGS.load_gan_model is None:
         cur_time = datetime.now().strftime("%Y%m%d-%H%M%S")
     else:
         cur_time = FLAGS.load_model
@@ -90,62 +93,59 @@ def main(_):
     data = Dataset(name='generation', mode=0, resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
                    log_dir=log_dir,  is_debug=False)
 
-    # Initialize model
-    model = Pix2pix(input_img_shape=(*data.input_img_shape[0:2], 3),
-                    gen_mode=FLAGS.gen_mode,
-                    lr=FLAGS.learning_rate,
-                    total_iters=FLAGS.iters,
-                    is_train=FLAGS.is_train,
-                    log_dir=log_dir,
-                    lambda_1=FLAGS.lambda_1,
-                    num_class=data.num_seg_class)
-
     # Initialize solver
-    solver = Solver(model=model, data=data, batch_size=FLAGS.batch_size)
+    solver = Solver(flags=FLAGS, data=data, log_dir=log_dir)
 
-    # Initialize saver
-    saver = tf.compat.v1.train.Saver(max_to_keep=1)
+    # Intialize evaluator
+    evaluator = Evaluator(data=data, batch_size=128, model_dir=FLAGS.load_iden_model)
 
     if FLAGS.is_train is True:
-        train(solver, saver, logger, model_dir, log_dir, sample_dir)
+        train(solver, logger, model_dir, log_dir, sample_dir)
     else:
-        test(solver, saver, model_dir, test_dir)
+        test(solver, model_dir, test_dir)
 
 
-def train(solver, saver, logger, model_dir, log_dir, sample_dir):
+def train(solver, logger, model_dir, log_dir, sample_dir):
     iter_time = 0
 
-    if FLAGS.load_model is not None:
-        flag, iter_time = load_model(saver=saver, solver=solver, logger=logger, model_dir=model_dir, is_train=True)
+    if FLAGS.load_gan_model is not None:
+        flag, iter_time = solver.load_model(logger=logger, model_dir=model_dir, is_train=True)
 
         if flag is True:
             logger.info(' [!] Load Success! Iter: {}'.format(iter_time))
         else:
-            exit(" [!] Failed to restore model {}".format(FLAGS.load_model))
+            exit(' [!] Failed to restore model {}'.format(FLAGS.load_gan_model))
 
-    # # Tensorboard writer
-    # tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
+    # Tensorboard writer
+    tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
     while iter_time < FLAGS.iters:
-        # gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
-        gen_loss, adv_loss, cond_loss, dis_loss = solver.train()
+        gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
 
-        # # Write to tensorboard
-        # tb_writer.add_summary(summary, iter_time)
-        # tb_writer.flush()
+        # Write to tensorboard
+        tb_writer.add_summary(summary, iter_time)
+        tb_writer.flush()
 
+        # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Dis. loss: {2:.3f } Gen. loss:{3:.3f}, Adv. loss:{4:.3f}, Cond. loss:{5:.3f}"
+            msg = "[{0:6} / {1:6}] Dis. loss: {2:.3f} Gen. loss:{3:.3f}, Adv. loss:{4:.3f}, Cond. loss:{5:.3f}"
             print(msg.format(iter_time, FLAGS.iters, dis_loss, gen_loss, adv_loss, cond_loss))
+
+        # Sampling
+        if iter_time % FLAGS.sample_freq == 0:
+            solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
+
 
         iter_time += 1
 
 
-def test(solver, saver, model_dir, test_dir):
+def test(solver, model_dir, test_dir):
     print("Hello test!")
 
 
 def load_model(saver, solver, logger, model_dir, is_train=False):
+    print('model_dir: {}'.format(model_dir))
+
     if is_train:
         logger.info(' [*] Reading checkpoint...')
     else:
