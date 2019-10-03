@@ -5,7 +5,6 @@
 # Email: sbkim0407@gmail.com
 # -------------------------------------------------------------------------
 import os
-import cv2
 import numpy as np
 import tensorflow as tf
 
@@ -72,7 +71,7 @@ class Solver(object):
     def generate_val_imgs(self, batch_size=10):
         print(' [*] Generate validation imgs...')
 
-        seg_all = np.zeros((self.data.num_val_imgs, *self.data.input_img_shape), dtype=np.float32)
+        segs_all = np.zeros((self.data.num_val_imgs, *self.data.input_img_shape), dtype=np.float32)
         samples_all = np.zeros((self.data.num_val_imgs, *self.data.output_img_shape), dtype=np.float32)
         clses_all = np.zeros((self.data.num_val_imgs, 1), dtype=np.uint8)
 
@@ -88,11 +87,38 @@ class Solver(object):
 
             samples = self.sess.run(self.model.g_sample, feed_dict=feed)
 
-            seg_all[index:index + img_vals.shape[0], :, :, :] = seg_vals
+            segs_all[index:index + img_vals.shape[0], :, :, :] = seg_vals
             samples_all[index:index + img_vals.shape[0], :, :, :] = samples
             clses_all[index:index + img_vals.shape[0], :] = cls_vals
 
-        return seg_all, samples_all, clses_all
+        return segs_all, samples_all, clses_all
+
+    def generate_test_imgs(self, batch_size=20):
+        print(' [*] Generate test imgs...')
+
+        imgs_all = np.zeros((self.data.num_test_imgs, *self.data.output_img_shape), dtype=np.float32)
+        segs_all = np.zeros((self.data.num_test_imgs, *self.data.input_img_shape), dtype=np.float32)
+        samples_all = np.zeros((self.data.num_test_imgs, *self.data.output_img_shape), dtype=np.float32)
+        clses_all = np.zeros((self.data.num_test_imgs, 1), dtype=np.uint8)
+
+        for i, index in enumerate(range(0, self.data.num_test_imgs, batch_size)):
+            print('[{}/{}] generating process...'.format(i + 1, (self.data.num_test_imgs // batch_size)))
+
+            img_tests, cls_tests, seg_tests = self.data.direct_batch(batch_size=batch_size, index=index, stage='test')
+
+            feed = {
+                self.model.mask_tfph: seg_tests,
+                self.model.rate_tfph: 0.,
+            }
+
+            samples = self.sess.run(self.model.g_sample, feed_dict=feed)
+
+            imgs_all[index:index + img_tests.shape[0], :, :, :] = img_tests
+            segs_all[index:index + img_tests.shape[0], :, :, :] = seg_tests
+            samples_all[index:index + img_tests.shape[0], :, :, :] = samples
+            clses_all[index:index + img_tests.shape[0], :] = cls_tests
+
+        return segs_all, samples_all, clses_all, imgs_all
 
     def img_sample(self, iter_time, save_dir, batch_size=4):
         imgs, _, segs = self.data.train_random_batch(batch_size=batch_size)
@@ -128,14 +154,17 @@ class Solver(object):
                     meta_graph_path = ckpt.model_checkpoint_path + '.meta'
                     iter_time = int(meta_graph_path.split('-')[-1].split('.')[0])
 
+                    # Get metmetrics from the model checkpoints
+                    best_acc = self.get_best_acc()
+
                     if is_train:
                         logger.info(' [!] Load Iter: {}'.format(iter_time))
                     else:
                         print(' [!] Load Iter: {}'.format(iter_time))
 
-                    return True, iter_time + 1
+                    return True, iter_time + 1, best_acc
                 else:
-                    return False, None
+                    return False, None, None
 
     def save_model(self, logger, model_dir, iter_time, best_acc):
         self.saver.save(self.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
@@ -213,29 +242,37 @@ class Evaluator(object):
 
         return accuracy * 100.
 
-    def eval_test(self):
+    def eval_test(self, segs_all, imgs_all, clses_all, batch_size=20):
         print(' [*] Evaluate on the test dataset...')
 
-        # Initialize/reset the running variables
+        # Initialize/reset the running varaibels.
         self.sess.run(self.model.running_vars_initializer)
 
-        for j, index in enumerate(range(0, self.data.num_test_imgs, self.batch_size)):
-            print('[{}/{}] processing...'.format(j + 1, (self.data.num_test_imgs // self.batch_size) + 1))
+        for i, index in enumerate(range(0, self.data.num_test_imgs, batch_size)):
+            print('[{}/{}] identification process...'.format(i + 1, (self.data.num_test_imgs // batch_size)))
 
-            img_test, cls_test = self.data.direct_batch(batch_size=self.batch_size, index=index, stage='test')
+            if index + batch_size < self.data.num_test_imgs:
+                imgs = imgs_all[index:index + batch_size, :, :, :]
+                segs = segs_all[index:index + batch_size, :, :, :]
+                batch_clses = clses_all[index:index + batch_size, :]
+            else:
+                imgs = imgs_all[index:, :, :, :]
+                segs = segs_all[index:, :, :, :]
+                batch_clses = clses_all[index:, :]
 
+            batch_imgs = utils.extract_iris(imgs, segs)
             feed = {
-                self.model.img_tfph: img_test,
-                self.model.gt_tfph: cls_test,
+                self.model.img_tfph: batch_imgs,
+                self.model.gt_tfph: batch_clses,
                 self.model.train_mode: False
             }
 
             self.sess.run(self.model.accuracy_metric_update, feed_dict=feed)
 
-        # Calculate the accurac
-        accuracy = self.sess.run(self.model.accuracy_metric) * 100.
+        # Calculate the accuracy
+        accuracy, metric_summary_op = self.sess.run([self.model.accuracy_metric, self.model.metric_summary_op])
 
-        return accuracy
+        return accuracy * 100.
 
     def load_model(self, model_dir):
         print(' [*] Reading identification checkpoint...')

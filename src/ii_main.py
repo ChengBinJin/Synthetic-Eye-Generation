@@ -6,14 +6,13 @@
 # Email: sbkim0407@gmail.com
 # --------------------------------------------------------------------------
 import os
-# import cv2
 import logging
 import numpy as np
 from datetime import datetime
 import tensorflow as tf
 
 import utils as utils
-from dataset import Dataset
+import ii_dataset as ii_dataset
 from resnet import ResNet18
 from ii_solver import Solver
 
@@ -79,7 +78,7 @@ def main(_):
     print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
 
     # Initialize dataset
-    data = Dataset(is_train=FLAGS.is_train, log_dir=log_dir, mode=FLAGS.mode, is_debug=False)
+    data = ii_dataset.Dataset(is_train=FLAGS.is_train, log_dir=log_dir, mode=FLAGS.mode, is_debug=False)
 
     # Initialize model
     model = ResNet18(input_img_shape=data.input_img_shape,

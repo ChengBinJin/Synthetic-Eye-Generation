@@ -210,7 +210,7 @@ def save_imgs(img_stores, iter_time=None, save_dir=None, margin=5, img_name=None
     if img_name is None:
         cv2.imwrite(os.path.join(save_dir, str(iter_time).zfill(6) + '.png'), canvas)
     else:
-        cv2.imwrite(os.path.join(save_dir, name_append+img_name[0]), canvas)
+        cv2.imwrite(os.path.join(save_dir, name_append+img_name), canvas)
 
 
 def extract_iris(imgs, segs, margin=5, input_h=200, input_w=200):
