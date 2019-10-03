@@ -3,6 +3,7 @@ import logging
 import cv2
 import numpy as np
 import utils as utils
+from scipy.ndimage import rotate
 
 class Dataset(object):
     def __init__(self, name='Generation', resize_factor=0.5, img_shape=(640, 400, 1), is_train=False,
@@ -14,11 +15,16 @@ class Dataset(object):
         self.img_shape = img_shape
         self.input_img_shape = (int(self.resize_factor * img_shape[0]),
                                 int(self.resize_factor * img_shape[1]), 3)
+        self.output_img_shape = (int(self.resize_factor * img_shape[0]),
+                                 int(self.resize_factor * img_shape[1]), 1)
 
         self.train_folder = '../../Data/OpenEDS/Identification/train'
         self.val_folder = '../../Data/OpenEDS/Identification/val'
         self.test_folder = '../../Data/OpenEDS/Identification/test'
         self._read_img_path()
+
+        if is_debug and is_train:
+            self.debug_augmentation()
 
         if is_train:
             self.logger = logging.getLogger(__name__)  # logger
@@ -36,6 +42,7 @@ class Dataset(object):
             self.logger.info('Num. seg. classes: \t\t{}'.format(self.num_seg_class))
             self.logger.info('Original img shape: \t\t{}'.format(self.img_shape))
             self.logger.info('Input img shape: \t\t{}'.format(self.input_img_shape))
+            self.logger.info('Output img shape: \t\t{}'.format(self.output_img_shape))
             self.logger.info('Resize_factor: \t\t{}'.format(self.resize_factor))
 
     def _read_img_path(self):
@@ -46,14 +53,42 @@ class Dataset(object):
         self.num_val_imgs = len(self.val_paths)
         self.num_test_imgs = len(self.test_paths)
 
+    def debug_augmentation(self, num_try=8, save_dir='../debug'):
+        img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=num_try)]
+
+        for img_path in img_paths:
+            # Read data
+            img_combine = cv2.imread(img_path)
+            img = img_combine[:, :self.img_shape[1], 1]
+            seg = img_combine[:, self.img_shape[1]:, :]
+
+            # Translation
+            img_tran, seg_tran = self.aug_translate(img, seg)
+            # Flip
+            img_flip, seg_flip = self.aug_flip(img, seg)
+            # Rotation
+            img_rot, seg_rot = self.aug_rotate(img, seg)
+            # Translation, flip, and rotation
+            img_aug, seg_aug = self.data_augmentation(img, seg)
+
+            img_upper = np.hstack([img, img_tran, img_flip, img_rot, img_aug])
+            img_upper = np.dstack([img_upper, img_upper, img_upper])
+            seg_lower = np.hstack([seg, seg_tran, seg_flip, seg_rot, seg_aug])
+            canvas = np.vstack([img_upper, seg_lower])
+
+            canvas = cv2.resize(canvas, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
+
+            cv2.imwrite(os.path.join(save_dir, 'gen_aug_'+os.path.basename(img_path)), canvas)
+
+
     def train_random_batch(self, batch_size):
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
         train_imgs, train_labels, train_segs = self.read_data(img_paths)
         return train_imgs, train_labels, train_segs
 
     def read_data(self, img_paths):
-        batch_imgs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
-        batch_segs = np.zeros((len(img_paths), *self.input_img_shape[0:2], 3), dtype=np.float32)
+        batch_imgs = np.zeros((len(img_paths), *self.output_img_shape), dtype=np.float32)
+        batch_segs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
         batch_labels = np.zeros((len(img_paths), 1), dtype=np.uint8)
 
         for i, img_path in enumerate(img_paths):
@@ -65,12 +100,62 @@ class Dataset(object):
             # Resize
             img = cv2.resize(img, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_LINEAR)
             seg = cv2.resize(seg, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_NEAREST)
+            img, seg = self.data_augmentation(img, seg)
 
             batch_imgs[i, :, :, 0] = img
             batch_segs[i, :, :, :] = seg
             batch_labels[i] = self.convert_to_cls(img_path)
 
         return batch_imgs, batch_labels, batch_segs
+
+    def data_augmentation(self, img, seg):
+        img_aug, seg_aug = self.aug_translate(img, seg)
+        img_aug, seg_aug = self.aug_flip(img_aug, seg_aug)
+        img_aug, seg_aug = self.aug_rotate(img_aug, seg_aug)
+
+        return img_aug, seg_aug
+
+    @staticmethod
+    def aug_translate(img, label, resize_factor=1.1):
+        # Resize originl image
+        img_bigger = cv2.resize(src=img.copy(), dsize=None, fx=resize_factor, fy=resize_factor,
+                                interpolation=cv2.INTER_LINEAR)
+        label_bigger = cv2.resize(src=label.copy(), dsize=None, fx=resize_factor, fy=resize_factor,
+                                  interpolation=cv2.INTER_NEAREST)
+
+        # Generate random positions for horizontal and vertical axes
+        h_bigger, w_bigger = img_bigger.shape
+        h_star = np.random.random_integers(low=0, high=h_bigger - img.shape[0])
+        w_star = np.random.random_integers(low=0, high=w_bigger - img.shape[1])
+
+        # Crop image from the bigger one
+        img_crop = img_bigger[h_star:h_star + img.shape[0], w_star:w_star + img.shape[1]]
+        label_crop = label_bigger[h_star:h_star + img.shape[0], w_star:w_star + img.shape[1]]
+
+        return img_crop, label_crop
+
+    @staticmethod
+    def aug_flip(img, label):
+        # Random vertical-axis flip
+        if np.random.uniform(low=0., high=1.) > 0.5:
+            img_flip = cv2.flip(src=img, flipCode=1)
+            label_flip = cv2.flip(src=label, flipCode=1)
+        else:
+            img_flip = img.copy()
+            label_flip = label.copy()
+
+        return img_flip, label_flip
+
+    @staticmethod
+    def aug_rotate(img, label, min_degree=-15, max_degree=15):
+        # Random rotate image
+        angle = np.random.randint(low=min_degree, high=max_degree, size=None)
+        img_rotate = rotate(input=img, angle=angle, axes=(0, 1), reshape=False, order=3, mode='constant', cval=0.)
+        img_rotate = np.clip(img_rotate, a_min=0., a_max=255.)
+        label_rotate = rotate(input=label, angle=angle, axes=(0, 1), reshape=False, order=0, mode='constant', cval=0.)
+
+        return img_rotate, label_rotate
+
 
     @staticmethod
     def convert_to_cls(img_name):

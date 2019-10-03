@@ -12,7 +12,7 @@ from datetime import datetime
 import utils as utils
 from eg_solver import Solver, Evaluator
 
-import ii_dataset as ii_dataset
+import eg_dataset as eg_dataset
 
 
 FLAGS = tf.flags.FLAGS
@@ -84,8 +84,32 @@ def main(_):
                                                                      cur_time=cur_time,
                                                                      subfolder='generation')
 
-    data = ii_dataset.Dataset(name='generation', resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
-                   log_dir=log_dir, is_debug=False)
+    data = eg_dataset.Dataset(name='generation', resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
+                   log_dir=log_dir, is_debug=True)
+    imgs, clses, segs = data.train_random_batch(batch_size=4)
+
+    print('imgs.shape: {}'.format(imgs.shape))
+    print('clses shape: {}'.format(clses.shape))
+    print('segs shape: {}'.format(segs.shape))
+
+    import cv2
+    import numpy as np
+
+    num_imgs, h, w, c = segs.shape
+    for i in range(num_imgs):
+        img = imgs[i]
+        cls = clses[i]
+        seg = segs[i]
+
+        canvas = np.zeros((h, 2*w, c), dtype=np.uint8)
+        canvas[:, :w, :] = np.dstack([img, img, img])
+        canvas[:, w:, :] = seg
+
+        print('cls: {}'.format(cls[0]))
+
+        cv2.imshow('Show', canvas)
+        if cv2.waitKey(0) & 0xFF == 27:
+            exit("Esc clicked!")
 
     # # Logger
     # logger = logging.getLogger(__name__)  # logger
