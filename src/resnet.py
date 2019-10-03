@@ -33,11 +33,11 @@ class ResNet18(object):
         if self.is_train:
             self._build_graph()
             self._best_metrices_record()
-            self._init_tensorboard()
         else:
             self._build_test_graph()
 
         self._eval_graph()
+        self._init_tensorboard()
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
     def _build_test_graph(self):
@@ -98,12 +98,13 @@ class ResNet18(object):
         self.assign_best_acc = tf.compat.v1.assign(self.best_acc, value=self.best_acc_tfph)
 
     def _init_tensorboard(self):
-        self.tb_total = tf.compat.v1.summary.scalar('Loss/total_loss', self.total_loss)
-        self.tb_data = tf.compat.v1.summary.scalar('Loss/data_loss', self.data_loss)
-        self.tb_reg = tf.compat.v1.summary.scalar('Loss/reg_term', self.reg_term)
-        self.tb_batch_acc = tf.compat.v1.summary.scalar('Acc/batch_acc', self.batch_acc)
-        self.summary_op = tf.compat.v1.summary.merge(
-            inputs=[self.tb_total, self.tb_data, self.tb_reg, self.tb_lr, self.tb_batch_acc])
+        if self.is_train:
+            self.tb_total = tf.compat.v1.summary.scalar('Loss/total_loss', self.total_loss)
+            self.tb_data = tf.compat.v1.summary.scalar('Loss/data_loss', self.data_loss)
+            self.tb_reg = tf.compat.v1.summary.scalar('Loss/reg_term', self.reg_term)
+            self.tb_batch_acc = tf.compat.v1.summary.scalar('Acc/batch_acc', self.batch_acc)
+            self.summary_op = tf.compat.v1.summary.merge(
+                inputs=[self.tb_total, self.tb_data, self.tb_reg, self.tb_lr, self.tb_batch_acc])
 
         self.tb_accuracy = tf.compat.v1.summary.scalar('Acc/val_acc', self.accuracy_metric * 100.)
         self.metric_summary_op = tf.compat.v1.summary.merge(inputs=[self.tb_accuracy])

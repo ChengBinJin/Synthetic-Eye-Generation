@@ -10,8 +10,9 @@ import tensorflow as tf
 from datetime import datetime
 
 import utils as utils
-from dataset import Dataset
 from eg_solver import Solver, Evaluator
+
+import ii_dataset as ii_dataset
 
 
 FLAGS = tf.flags.FLAGS
@@ -27,7 +28,7 @@ tf.flags.DEFINE_integer('print_freq', 5, 'print frequency for loss information, 
 tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
 tf.flags.DEFINE_integer('sample_freq', 5, 'sample frequence for checking qualitative evaluation, default: 500')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
-tf.flags.DEFINE_integer('eval_freq', 10, 'save frequency for model, default: 10')
+tf.flags.DEFINE_integer('eval_freq', 20, 'save frequency for model, default: 10')
 tf.flags.DEFINE_string('load_gan_model', None, 'folder of saved gan_model that you wish to continue training '
                                            '(e.g. 20191003-103205), default: None')
 tf.flags.DEFINE_string('load_iden_model', '20190921-111742',
@@ -83,29 +84,28 @@ def main(_):
                                                                      cur_time=cur_time,
                                                                      subfolder='generation')
 
-    # Logger
-    logger = logging.getLogger(__name__)  # logger
-    logger.setLevel(logging.INFO)
-    utils.init_logger(logger=logger, log_dir=log_dir, is_train=FLAGS.is_train, name='main')
-    print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
+    data = ii_dataset.Dataset(name='generation', resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
+                   log_dir=log_dir, is_debug=False)
 
-    # Initialize dataset
-    data = Dataset(name='generation', mode=0, resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
-                   log_dir=log_dir,  is_debug=False)
+    # # Logger
+    # logger = logging.getLogger(__name__)  # logger
+    # logger.setLevel(logging.INFO)
+    # utils.init_logger(logger=logger, log_dir=log_dir, is_train=FLAGS.is_train, name='main')
+    # print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
+    #
+    # # Initialize solver
+    # solver = Solver(flags=FLAGS, log_dir=log_dir)
+    #
+    # # Intialize evaluator
+    # evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
+    #
+    # if FLAGS.is_train is True:
+    #     train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
+    # else:
+    #     test(solver, model_dir, test_dir)
 
-    # Initialize solver
-    solver = Solver(flags=FLAGS, data=data, log_dir=log_dir)
 
-    # Intialize evaluator
-    evaluator = Evaluator(data=data, batch_size=128, model_dir=FLAGS.load_iden_model)
-
-    if FLAGS.is_train is True:
-        train(solver, logger, model_dir, log_dir, sample_dir)
-    else:
-        test(solver, model_dir, test_dir)
-
-
-def train(solver, logger, model_dir, log_dir, sample_dir):
+def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
     iter_time = 0
 
     if FLAGS.load_gan_model is not None:
@@ -128,12 +128,18 @@ def train(solver, logger, model_dir, log_dir, sample_dir):
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Dis. loss: {2:.3f} Gen. loss:{3:.3f}, Adv. loss:{4:.3f}, Cond. loss:{5:.3f}"
+            msg = "[{0:6} / {1:6}] Dis_loss: {2:.3f} Gen._loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss:{5:.3f}"
             print(msg.format(iter_time, FLAGS.iters, dis_loss, gen_loss, adv_loss, cond_loss))
 
-        # Sampling
+        # Sampling generated imgs
         if iter_time % FLAGS.sample_freq == 0:
             solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
+
+        # Evaluating
+        if (iter_time % FLAGS.eval_freq == 0) or (iter_time + 1 == FLAGS.iters):
+            acc = evaluator.eval_val(tb_writer, iter_time)
+            # acc = evaluator.eval_test()
+            print('Acc: {:.3f}'.format(acc))
 
 
         iter_time += 1

@@ -77,11 +77,6 @@ class Dataset(object):
 
         return train_imgs, train_labels
 
-    def gen_train_random_batch(self, batch_size):
-        img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
-        train_imgs, train_labels, train_segs = self.read_data(img_paths)
-        return train_imgs, train_labels, train_segs
-
     # This function for identification
     def direct_batch(self, batch_size, index, stage='train'):
         if stage == 'train':

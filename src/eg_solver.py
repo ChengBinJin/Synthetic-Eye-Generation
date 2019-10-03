@@ -6,14 +6,19 @@
 # -------------------------------------------------------------------------
 import os
 import tensorflow as tf
+
 import utils as utils
+import eg_dataset as eg_dataset
+import ii_dataset as ii_dataset
 from pix2pix import Pix2pix
 from resnet import ResNet18
 
 
 class Solver(object):
-    def __init__(self, data, flags, log_dir=None):
-        self.data = data
+    def __init__(self, flags, log_dir=None):
+        # Initialize dataset
+        self.data = eg_dataset.Dataset(name='generation', resize_factor=flags.resize_factor,
+                                       is_train=flags.is_train, log_dir=log_dir,  is_debug=False)
         self.flags = flags
         self.batch_size = self.flags.batch_size
         self.log_dir = log_dir
@@ -25,7 +30,7 @@ class Solver(object):
         self.graph = tf.Graph()
         with self.graph.as_default():
             # Initialize gan model
-            self.model = Pix2pix(input_img_shape=(*self.data.input_img_shape[0:2], 3),
+            self.model = Pix2pix(input_img_shape=self.data.input_img_shape,
                                  gen_mode=self.flags.gen_mode,
                                  lr=self.flags.learning_rate,
                                  total_iters=self.flags.iters,
@@ -46,7 +51,7 @@ class Solver(object):
 
     def train(self):
         def feed_run():
-            imgs, _, segs = self.data.gen_train_random_batch(batch_size=self.batch_size)
+            imgs, _, segs = self.data.train_random_batch(batch_size=self.batch_size)
             feed = {self.model.img_tfph: imgs,
                     self.model.mask_tfph: segs,
                     self.model.rate_tfph: 0.5}
@@ -63,7 +68,7 @@ class Solver(object):
         return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
 
     def img_sample(self, iter_time, save_dir, batch_size=4):
-        imgs, _, segs = self.data.gen_train_random_batch(batch_size=batch_size)
+        imgs, _, segs = self.data.train_random_batch(batch_size=batch_size)
         feed = {self.model.mask_tfph: segs,
                 self.model.rate_tfph: 0.}  # rate: 1 - keep_prob
 
@@ -98,11 +103,13 @@ class Solver(object):
                     return False, None
 
 
-
 # Evaluator
 class Evaluator(object):
-    def __init__(self, data, batch_size=128, model_dir=None):
-        self.data = data
+    def __init__(self, flags, batch_size=128, model_dir=None, log_dir=None):
+        # Initialize dataset
+        self.data = ii_dataset.Dataset(name='identification', mode=1, is_train=flags.is_train,
+                                       log_dir=log_dir, is_debug=False)
+
         self.batch_size = batch_size
         self.model_dir = model_dir
 
@@ -130,6 +137,58 @@ class Evaluator(object):
                         print(' [!] Loadd IdenModel Success! Iter: {}'.format(iter_time))
                     else:
                         exit(' [!] Failed to restore IdenModel {}'.format(self.load_model))
+
+    def eval_val(self, tb_writer, iter_time):
+        print(' [*] Evaluate on the validation dataset...')
+
+        # Initialize/reset the running varaibels.
+        self.sess.run(self.model.running_vars_initializer)
+
+        for i, index in enumerate(range(0, self.data.num_val_imgs, self.batch_size)):
+            print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // self.batch_size) + 1))
+
+            img_vals, cls_vals = self.data.direct_batch(batch_size=self.batch_size, index=index, stage='val')
+
+            feed = {
+                self.model.img_tfph: img_vals,
+                self.model.gt_tfph: cls_vals,
+                self.model.train_mode: False
+            }
+
+            self.sess.run(self.model.accuracy_metric_update, feed_dict=feed)
+
+        # Calculate the accuracy
+        accuracy, metric_summary_op = self.sess.run([self.model.accuracy_metric, self.model.metric_summary_op])
+
+        # Write to tensorabrd
+        tb_writer.add_summary(metric_summary_op, iter_time)
+        tb_writer.flush()
+
+        return accuracy * 100.
+
+    def eval_test(self):
+        print(' [*] Evaluate on the test dataset...')
+
+        # Initialize/reset the running variables
+        self.sess.run(self.model.running_vars_initializer)
+
+        for j, index in enumerate(range(0, self.data.num_test_imgs, self.batch_size)):
+            print('[{}/{}] processing...'.format(j + 1, (self.data.num_test_imgs // self.batch_size) + 1))
+
+            img_test, cls_test = self.data.direct_batch(batch_size=self.batch_size, index=index, stage='test')
+
+            feed = {
+                self.model.img_tfph: img_test,
+                self.model.gt_tfph: cls_test,
+                self.model.train_mode: False
+            }
+
+            self.sess.run(self.model.accuracy_metric_update, feed_dict=feed)
+
+        # Calculate the accurac
+        accuracy = self.sess.run(self.model.accuracy_metric) * 100.
+
+        return accuracy
 
     def load_model(self, model_dir):
         print(' [*] Reading identification checkpoint...')
