@@ -136,7 +136,7 @@ def debug_iris_cropping(img_paths, save_dir, h=640, w=400, margin=5):
 
 def padding(img, shape=(200, 200)):
     tmp = np.zeros(shape, dtype=np.float32)
-    h, w = img.shape
+    h, w = img.shape[0:2]
 
     if h <= w:
         factor = tmp.shape[1] / w
@@ -211,3 +211,26 @@ def save_imgs(img_stores, iter_time=None, save_dir=None, margin=5, img_name=None
         cv2.imwrite(os.path.join(save_dir, str(iter_time).zfill(6) + '.png'), canvas)
     else:
         cv2.imwrite(os.path.join(save_dir, name_append+img_name[0]), canvas)
+
+
+def extract_iris(imgs, segs, margin=5, input_h=200, input_w=200):
+    batch_imgs = np.zeros((imgs.shape[0], input_h, input_w, 1), dtype=np.float32)
+
+    for i in range(imgs.shape[0]):
+        img = imgs[i]
+        seg = segs[i]
+
+        mask = np.zeros((imgs.shape[1], imgs.shape[2], 1), dtype=np.uint8)
+        mask[:, :, :][seg[:, :, 1] == 204] = 1  # iris part of mask
+        img = img * mask                        # crop iris infor from img
+
+        # Cropping iris part
+        x, y, w, h = cv2.boundingRect(mask[:, :, 0])
+        new_x = np.maximum(0, x - margin)
+        new_y = np.maximum(0, y - margin)
+        crop_img = img[new_y:new_y + h + margin, new_x:new_x + w + margin, :]  # Extract more bigger area
+
+        # Padding to the required size by preserving ratio of height and width
+        batch_imgs[i, :, :, :] = np.expand_dims(padding(crop_img), axis=2)
+
+    return batch_imgs

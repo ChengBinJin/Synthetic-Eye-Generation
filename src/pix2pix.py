@@ -37,6 +37,7 @@ class Pix2pix(object):
         utils.init_logger(logger=self.logger, log_dir=self.log_dir, is_train=self.is_train, name=self.name)
 
         self._build_graph()         # main graph
+        self._best_metrics_record()
         self._init_tensorboard()    # tensorboard
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
@@ -70,6 +71,14 @@ class Pix2pix(object):
         # Optimizers
         self.gen_optim = self.init_optimizer(loss=self.gen_loss, variables=self.gen_obj.variables, name='Adam_gen')
         self.dis_optim = self.init_optimizer(loss=self.dis_loss, variables=self.dis_obj.variables, name='Adam_dis')
+
+    def _best_metrics_record(self):
+        self.best_acc_tfph = tf.compat.v1.placeholder(tf.float32, name='best_acc')
+
+        # Best accuracy variable
+        self.best_acc = tf.compat.v1.get_variable(name='best_acc', dtype=tf.float32, initializer=tf.constant(0.),
+                                                  trainable=False)
+        self.assign_best_acc = tf.compat.v1.assign(self.best_acc, value=self.best_acc_tfph)
 
     def init_optimizer(self, loss, variables, name='Adam'):
         with tf.compat.v1.variable_scope(name):

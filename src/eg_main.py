@@ -4,8 +4,10 @@
 # Written by Cheng-Bin Jin
 # Email: sbkim0407@gmail.com
 # -------------------------------------------------------------------------
-import logging
 import os
+import cv2
+import logging
+import numpy as np
 import tensorflow as tf
 from datetime import datetime
 
@@ -84,52 +86,26 @@ def main(_):
                                                                      cur_time=cur_time,
                                                                      subfolder='generation')
 
-    data = eg_dataset.Dataset(name='generation', resize_factor=FLAGS.resize_factor, is_train=FLAGS.is_train,
-                   log_dir=log_dir, is_debug=True)
-    imgs, clses, segs = data.train_random_batch(batch_size=4)
+    # Logger
+    logger = logging.getLogger(__name__)  # logger
+    logger.setLevel(logging.INFO)
+    utils.init_logger(logger=logger, log_dir=log_dir, is_train=FLAGS.is_train, name='main')
+    print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
 
-    print('imgs.shape: {}'.format(imgs.shape))
-    print('clses shape: {}'.format(clses.shape))
-    print('segs shape: {}'.format(segs.shape))
+    # Initialize solver
+    solver = Solver(flags=FLAGS, log_dir=log_dir)
 
-    import cv2
-    import numpy as np
+    # Intialize evaluator
+    evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
 
-    num_imgs, h, w, c = segs.shape
-    for i in range(num_imgs):
-        img = imgs[i]
-        cls = clses[i]
-        seg = segs[i]
-
-        canvas = np.zeros((h, 2*w, c), dtype=np.uint8)
-        canvas[:, :w, :] = np.dstack([img, img, img])
-        canvas[:, w:, :] = seg
-
-        print('cls: {}'.format(cls[0]))
-
-        cv2.imshow('Show', canvas)
-        if cv2.waitKey(0) & 0xFF == 27:
-            exit("Esc clicked!")
-
-    # # Logger
-    # logger = logging.getLogger(__name__)  # logger
-    # logger.setLevel(logging.INFO)
-    # utils.init_logger(logger=logger, log_dir=log_dir, is_train=FLAGS.is_train, name='main')
-    # print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
-    #
-    # # Initialize solver
-    # solver = Solver(flags=FLAGS, log_dir=log_dir)
-    #
-    # # Intialize evaluator
-    # evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
-    #
-    # if FLAGS.is_train is True:
-    #     train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
-    # else:
-    #     test(solver, model_dir, test_dir)
+    if FLAGS.is_train is True:
+        train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
+    else:
+        test(solver, model_dir, test_dir)
 
 
 def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
+    best_acc = 0.
     iter_time = 0
 
     if FLAGS.load_gan_model is not None:
@@ -152,7 +128,7 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Dis_loss: {2:.3f} Gen._loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss:{5:.3f}"
+            msg = "[{0:6} / {1:6}] Dis_loss: {2:.3f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss:{5:.3f}"
             print(msg.format(iter_time, FLAGS.iters, dis_loss, gen_loss, adv_loss, cond_loss))
 
         # Sampling generated imgs
@@ -161,9 +137,15 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
 
         # Evaluating
         if (iter_time % FLAGS.eval_freq == 0) or (iter_time + 1 == FLAGS.iters):
-            acc = evaluator.eval_val(tb_writer, iter_time)
-            # acc = evaluator.eval_test()
-            print('Acc: {:.3f}'.format(acc))
+            segs, outputs, clses = solver.generate_val_imgs()
+            acc = evaluator.eval_val(tb_writer, iter_time, segs, outputs, clses)
+
+            if best_acc < acc:
+                best_acc = acc
+                solver.set_best_acc(best_acc)
+                solver.save_model(logger, model_dir, iter_time, best_acc)
+
+            print('Acc.:      {:.3f}%   - Best Acc.:      {:.3f}%'.format(acc, best_acc))
 
 
         iter_time += 1
@@ -172,31 +154,6 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
 def test(solver, model_dir, test_dir):
     print("Hello test!")
 
-
-def load_model(saver, solver, logger, model_dir, is_train=False):
-    print('model_dir: {}'.format(model_dir))
-
-    if is_train:
-        logger.info(' [*] Reading checkpoint...')
-    else:
-        print(' [*] Reading checkpoint...')
-
-    ckpt = tf.train.get_checkpoint_state(model_dir)
-    if ckpt and ckpt.model_checkpoint_path:
-        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-        saver.restore(solver.sess, os.path.join(model_dir, ckpt_name))
-
-        meta_graph_path = ckpt.model_checkpoint_path + '.meta'
-        iter_time = int(meta_graph_path.split('-')[-1].split('.')[0])
-
-        if is_train:
-            logger.info(' [!] Load Iter: {}'.format(iter_time))
-        else:
-            print(' [!] Load Iter: {}'.format(iter_time))
-
-        return True, iter_time + 1
-    else:
-        return False, None
 
 
 if __name__ == '__main__':

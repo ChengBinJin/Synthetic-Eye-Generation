@@ -5,6 +5,8 @@
 # Email: sbkim0407@gmail.com
 # -------------------------------------------------------------------------
 import os
+import cv2
+import numpy as np
 import tensorflow as tf
 
 import utils as utils
@@ -67,13 +69,46 @@ class Solver(object):
 
         return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
 
+    def generate_val_imgs(self, batch_size=10):
+        print(' [*] Generate validation imgs...')
+
+        seg_all = np.zeros((self.data.num_val_imgs, *self.data.input_img_shape), dtype=np.float32)
+        samples_all = np.zeros((self.data.num_val_imgs, *self.data.output_img_shape), dtype=np.float32)
+        clses_all = np.zeros((self.data.num_val_imgs, 1), dtype=np.uint8)
+
+        for i, index in enumerate(range(0, self.data.num_val_imgs, batch_size)):
+            # print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // batch_size)))
+
+            img_vals, cls_vals, seg_vals = self.data.direct_batch(batch_size=batch_size, index=index, stage='val')
+
+            feed = {
+                self.model.mask_tfph: seg_vals,
+                self.model.rate_tfph: 0.,
+            }
+
+            samples = self.sess.run(self.model.g_sample, feed_dict=feed)
+
+            seg_all[index:index + img_vals.shape[0], :, :, :] = seg_vals
+            samples_all[index:index + img_vals.shape[0], :, :, :] = samples
+            clses_all[index:index + img_vals.shape[0], :] = cls_vals
+
+        return seg_all, samples_all, clses_all
+
     def img_sample(self, iter_time, save_dir, batch_size=4):
         imgs, _, segs = self.data.train_random_batch(batch_size=batch_size)
-        feed = {self.model.mask_tfph: segs,
-                self.model.rate_tfph: 0.}  # rate: 1 - keep_prob
+        feed = {
+                self.model.mask_tfph: segs,
+                self.model.rate_tfph: 0.        # rate: 1 - keep_prob
+        }
 
         samples = self.sess.run(self.model.g_sample, feed_dict=feed)
         utils.save_imgs(img_stores=[segs, samples, imgs], iter_time=iter_time, save_dir=save_dir, is_vertical=True)
+
+    def set_best_acc(self, best_acc):
+        self.sess.run(self.model.assign_best_acc, feed_dict={self.model.best_acc_tfph: best_acc})
+
+    def get_best_acc(self):
+        return self.sess.run(self.model.best_acc)
 
     def load_model(self, logger, model_dir, is_train):
         with self.sess.as_default():
@@ -101,6 +136,10 @@ class Solver(object):
                     return True, iter_time + 1
                 else:
                     return False, None
+
+    def save_model(self, logger, model_dir, iter_time, best_acc):
+        self.saver.save(self.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
+        logger.info('[*] Model saved! Iter: {}, Best Acc. {:.3f}'.format(iter_time, best_acc))
 
 
 # Evaluator
@@ -138,20 +177,28 @@ class Evaluator(object):
                     else:
                         exit(' [!] Failed to restore IdenModel {}'.format(self.load_model))
 
-    def eval_val(self, tb_writer, iter_time):
+    def eval_val(self, tb_writer, iter_time, segs_all, imgs_all, clses_all, batch_size=10):
         print(' [*] Evaluate on the validation dataset...')
 
         # Initialize/reset the running varaibels.
         self.sess.run(self.model.running_vars_initializer)
 
-        for i, index in enumerate(range(0, self.data.num_val_imgs, self.batch_size)):
-            print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // self.batch_size) + 1))
+        for i, index in enumerate(range(0, self.data.num_val_imgs, batch_size)):
+            # print('[{}/{}] processing...'.format(i + 1, (self.data.num_val_imgs // batch_size)))
 
-            img_vals, cls_vals = self.data.direct_batch(batch_size=self.batch_size, index=index, stage='val')
+            if index + batch_size < self.data.num_val_imgs:
+                imgs = imgs_all[index:index + batch_size, :, :, :]
+                segs = segs_all[index:index + batch_size, :, :, :]
+                batch_clses = clses_all[index:index + batch_size, :]
+            else:
+                imgs = imgs_all[index:, :, :, :]
+                segs = segs_all[index:, :, :, :]
+                batch_clses = clses_all[index:, :]
 
+            batch_imgs = utils.extract_iris(imgs, segs)
             feed = {
-                self.model.img_tfph: img_vals,
-                self.model.gt_tfph: cls_vals,
+                self.model.img_tfph: batch_imgs,
+                self.model.gt_tfph: batch_clses,
                 self.model.train_mode: False
             }
 
@@ -206,4 +253,5 @@ class Evaluator(object):
             return True, iter_time
         else:
             return False, None
+
 
