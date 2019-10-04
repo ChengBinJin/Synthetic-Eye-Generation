@@ -21,10 +21,10 @@ tf.flags.DEFINE_float('resize_factor', 0.5, 'resize original input image, defaul
 tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
 tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for optimizer, default: 0.0002')
-tf.flags.DEFINE_integer('iters', 200000, 'number of iterations, default: 200000')
-tf.flags.DEFINE_integer('print_freq', 10, 'print frequency for loss information, default: 50')
+tf.flags.DEFINE_integer('iters', 20, 'number of iterations, default: 200000')
+tf.flags.DEFINE_integer('print_freq', 5, 'print frequency for loss information, default: 50')
 tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
-tf.flags.DEFINE_integer('sample_freq', 50, 'sample frequence for checking qualitative evaluation, default: 500')
+tf.flags.DEFINE_integer('sample_freq', 100, 'sample frequence for checking qualitative evaluation, default: 100')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
 tf.flags.DEFINE_integer('eval_freq', 2000, 'save frequency for model, default: 2000')
 tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish to continue training '
@@ -125,7 +125,7 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Dis_loss: {2:.3f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss:{5:.3f}"
+            msg = "[{0:6} / {1:6}] Dis_loss: {2:.3f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss: {5:.3f}"
             print(msg.format(iter_time, FLAGS.iters, dis_loss, gen_loss, adv_loss, cond_loss))
 
         # Sampling generated imgs

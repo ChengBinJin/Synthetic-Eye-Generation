@@ -51,20 +51,19 @@ class Solver(object):
                 self.saver = tf.compat.v1.train.Saver(max_to_keep=1)
 
     def train(self):
-        def feed_run():
-            imgs, _, segs = self.data.train_random_batch(batch_size=self.batch_size)
-            feed = {self.model.img_tfph: imgs,
-                    self.model.mask_tfph: segs,
-                    self.model.rate_tfph: 0.5}
-            return feed
+        imgs, _, segs = self.data.train_random_batch(batch_size=self.batch_size)
 
-        self.sess.run(self.model.dis_optim, feed_dict=feed_run())
-        self.sess.run(self.model.gen_optim, feed_dict=feed_run())
+        feed = {self.model.img_tfph: imgs,
+                self.model.mask_tfph: segs,
+                self.model.rate_tfph: 0.5}
+
+        self.sess.run(self.model.dis_optim, feed_dict=feed)
+        self.sess.run(self.model.gen_optim, feed_dict=feed)
 
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
         _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary = self.sess.run(
             [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
-             self.model.dis_loss, self.model.summary_op], feed_dict=feed_run())
+             self.model.dis_loss, self.model.summary_op], feed_dict=feed)
 
         return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
 
@@ -82,7 +81,7 @@ class Solver(object):
 
             feed = {
                 self.model.mask_tfph: seg_vals,
-                self.model.rate_tfph: 0.,
+                self.model.rate_tfph: 0.5,
             }
 
             samples = self.sess.run(self.model.g_sample, feed_dict=feed)
@@ -108,7 +107,7 @@ class Solver(object):
 
             feed = {
                 self.model.mask_tfph: seg_tests,
-                self.model.rate_tfph: 0.,
+                self.model.rate_tfph: 0.5,
             }
 
             samples = self.sess.run(self.model.g_sample, feed_dict=feed)
@@ -124,7 +123,7 @@ class Solver(object):
         imgs, _, segs = self.data.train_random_batch(batch_size=batch_size)
         feed = {
                 self.model.mask_tfph: segs,
-                self.model.rate_tfph: 0.        # rate: 1 - keep_prob
+                self.model.rate_tfph: 0.5        # rate: 1 - keep_prob
         }
 
         samples = self.sess.run(self.model.g_sample, feed_dict=feed)
