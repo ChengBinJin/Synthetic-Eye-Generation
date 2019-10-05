@@ -20,6 +20,7 @@ class Solver(object):
         # Initialize dataset
         self.data = eg_dataset.Dataset(name='generation', resize_factor=flags.resize_factor,
                                        is_train=flags.is_train, log_dir=log_dir,  is_debug=False)
+        self.iters = flags.epoch * self.data.num_train_imgs
         self.flags = flags
         self.batch_size = self.flags.batch_size
         self.log_dir = log_dir
@@ -34,7 +35,7 @@ class Solver(object):
             self.model = Pix2pix(input_img_shape=self.data.input_img_shape,
                                  gen_mode=self.flags.gen_mode,
                                  lr=self.flags.learning_rate,
-                                 total_iters=self.flags.iters,
+                                 total_iters=self.iters,
                                  is_train=self.flags.is_train,
                                  log_dir=self.log_dir,
                                  lambda_1=self.flags.lambda_1,
@@ -153,21 +154,18 @@ class Solver(object):
                     meta_graph_path = ckpt.model_checkpoint_path + '.meta'
                     iter_time = int(meta_graph_path.split('-')[-1].split('.')[0])
 
-                    # Get metmetrics from the model checkpoints
-                    best_acc = self.get_best_acc()
-
                     if is_train:
                         logger.info(' [!] Load Iter: {}'.format(iter_time))
                     else:
                         print(' [!] Load Iter: {}'.format(iter_time))
 
-                    return True, iter_time + 1, best_acc
+                    return True, iter_time + 1
                 else:
                     return False, None, None
 
-    def save_model(self, logger, model_dir, iter_time, best_acc):
+    def save_model(self, logger, model_dir, iter_time):
         self.saver.save(self.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
-        logger.info('[*] Model saved! Iter: {}, Best Acc. {:.3f}'.format(iter_time, best_acc))
+        logger.info('[*] Model saved! Iter: {}'.format(iter_time))
 
 
 # Evaluator

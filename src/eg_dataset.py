@@ -46,8 +46,9 @@ class Dataset(object):
             self.logger.info('Resize_factor: \t\t{}'.format(self.resize_factor))
 
     def _read_img_path(self):
-        self.train_paths = utils.all_files_under(self.train_folder)
-        self.val_paths = utils.all_files_under(self.val_folder)
+        # Generation task using training and validation data together
+        self.train_paths = utils.all_files_under(self.train_folder) + utils.all_files_under(self.val_folder)
+        self.val_paths = []
         self.test_paths = utils.all_files_under(self.test_folder)
         self.num_train_imgs = len(self.train_paths)
         self.num_val_imgs = len(self.val_paths)
@@ -136,7 +137,7 @@ class Dataset(object):
     def data_augmentation(self, img, seg):
         img_aug, seg_aug = self.aug_translate(img, seg)         # random translation
         img_aug, seg_aug = self.aug_flip(img_aug, seg_aug)      # random flip
-        img_aug, seg_aug = self.aug_rotate(img_aug, seg_aug)    # random rotate
+        # img_aug, seg_aug = self.aug_rotate(img_aug, seg_aug)    # random rotate
         return img_aug, seg_aug
 
     @staticmethod
@@ -171,7 +172,7 @@ class Dataset(object):
         return img_flip, label_flip
 
     @staticmethod
-    def aug_rotate(img, label, min_degree=-15, max_degree=15):
+    def aug_rotate(img, label, min_degree=-10, max_degree=10):
         # Random rotate image
         angle = np.random.randint(low=min_degree, high=max_degree, size=None)
         img_rotate = rotate(input=img, angle=angle, axes=(0, 1), reshape=False, order=3, mode='constant', cval=0.)

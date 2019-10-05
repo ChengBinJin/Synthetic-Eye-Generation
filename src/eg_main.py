@@ -21,12 +21,12 @@ tf.flags.DEFINE_float('resize_factor', 0.5, 'resize original input image, defaul
 tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
 tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for optimizer, default: 0.0002')
-tf.flags.DEFINE_integer('iters', 20, 'number of iterations, default: 200000')
-tf.flags.DEFINE_integer('print_freq', 5, 'print frequency for loss information, default: 50')
+tf.flags.DEFINE_integer('epoch', 200, 'number of epoch, default: 200')
+tf.flags.DEFINE_integer('print_freq', 50, 'print frequency for loss information, default: 50')
 tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
-tf.flags.DEFINE_integer('sample_freq', 100, 'sample frequence for checking qualitative evaluation, default: 100')
+tf.flags.DEFINE_integer('sample_freq', 500, 'sample frequence for checking qualitative evaluation, default: 500')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
-tf.flags.DEFINE_integer('eval_freq', 2000, 'save frequency for model, default: 2000')
+tf.flags.DEFINE_integer('save_freq', 50000, 'save frequency for model, default: 50000')
 tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish to continue training '
                                            '(e.g. 20191003-103205), default: None')
 tf.flags.DEFINE_string('load_iden_model', '20190921-111742',
@@ -43,12 +43,12 @@ def print_main_parameters(logger, flags, is_train=False):
         logger.info('dataset: \t\t\t{}'.format(flags.dataset))
         logger.info('is_train: \t\t\t{}'.format(flags.is_train))
         logger.info('learning_rate: \t\t{}'.format(flags.learning_rate))
-        logger.info('iters: \t\t\t{}'.format(flags.iters))
+        logger.info('epoch: \t\t\t{}'.format(flags.epoch))
         logger.info('print_freq: \t\t\t{}'.format(flags.print_freq))
         logger.info('lambda_1: \t\t\t{}'.format(flags.lambda_1))
         logger.info('sample_freq: \t\t{}'.format(flags.sample_freq))
         logger.info('sample_batch: \t\t{}'.format(flags.sample_batch))
-        logger.info('eval_freq: \t\t\t{}'.format(flags.eval_freq))
+        logger.info('save_freq: \t\t\t{}'.format(flags.save_freq))
         logger.info('load_model: \t\t\t{}'.format(flags.load_model))
         logger.info('load_iden_model: \t\t{}'.format(flags.load_iden_model))
     else:
@@ -59,12 +59,12 @@ def print_main_parameters(logger, flags, is_train=False):
         print('-- dataset: \t\t\t{}'.format(flags.dataset))
         print('-- is_train: \t\t\t{}'.format(flags.is_train))
         print('-- learning_rate: \t\t{}'.format(flags.learning_rate))
-        print('-- iters: \t\t\t{}'.format(flags.iters))
+        print('-- epoch: \t\t\t{}'.format(flags.epoch))
         print('-- print_freq: \t\t\t{}'.format(flags.print_freq))
         print('-- lambda_1: \t\t\t{}'.format(flags.lambda_1))
         print('-- sample_freq: \t\t{}'.format(flags.sample_freq))
         print('-- sample_batch: \t\t{}'.format(flags.sample_batch))
-        print('-- eval_freq: \t\t\t{}'.format(flags.eval_freq))
+        print('-- save_freq: \t\t\t{}'.format(flags.save_freq))
         print('-- load_model: \t\t\t{}'.format(flags.load_model))
         print('-- load_iden_model: \t\t{}'.format(flags.load_iden_model))
 
@@ -101,49 +101,39 @@ def main(_):
 
 
 def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
-    best_acc = 0.
     iter_time = 0
+    total_iters = solver.iters
 
     if FLAGS.load_model is not None:
-        flag, iter_time, best_acc = solver.load_model(logger=logger, model_dir=model_dir, is_train=True)
+        flag, iter_time = solver.load_model(logger=logger, model_dir=model_dir, is_train=True)
 
         if flag is True:
             logger.info(' [!] Load Success! Iter: {}'.format(iter_time))
-            logger.info('Best Acc.: {:.3f}%'.format(best_acc))
         else:
             exit(' [!] Failed to restore model {}'.format(FLAGS.load_gan_model))
 
     # Tensorboard writer
     tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
-    while iter_time < FLAGS.iters:
+    while iter_time < total_iters:
         gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
-
-        # Write to tensorboard
-        tb_writer.add_summary(summary, iter_time)
-        tb_writer.flush()
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:
-            msg = "[{0:6} / {1:6}] Dis_loss: {2:.3f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss: {5:.3f}"
-            print(msg.format(iter_time, FLAGS.iters, dis_loss, gen_loss, adv_loss, cond_loss))
+            # Write to tensorboard
+            tb_writer.add_summary(summary, iter_time)
+            tb_writer.flush()
+
+            msg = "[{0:7} / {1:7}] Dis_loss: {2:.5f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss: {5:.3f}"
+            print(msg.format(iter_time, total_iters, dis_loss, gen_loss, adv_loss, cond_loss))
 
         # Sampling generated imgs
         if iter_time % FLAGS.sample_freq == 0:
             solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
 
         # Evaluating
-        if (iter_time % FLAGS.eval_freq == 0) or (iter_time + 1 == FLAGS.iters):
-            segs, outputs, clses = solver.generate_val_imgs()
-            acc = evaluator.eval_val(tb_writer, iter_time, segs, outputs, clses)
-
-            if best_acc < acc:
-                best_acc = acc
-                solver.set_best_acc(best_acc)
-                solver.save_model(logger, model_dir, iter_time, best_acc)
-
-            print('Acc.:      {:.3f}%   - Best Acc.:      {:.3f}%'.format(acc, best_acc))
-
+        if (iter_time % FLAGS.save_freq == 0) or (iter_time + 1 == total_iters):
+            solver.save_model(logger, model_dir, iter_time)
 
         iter_time += 1
 
