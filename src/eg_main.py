@@ -24,7 +24,7 @@ tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for optimize
 tf.flags.DEFINE_integer('epoch', 200, 'number of epoch, default: 200')
 tf.flags.DEFINE_integer('print_freq', 50, 'print frequency for loss information, default: 50')
 tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
-tf.flags.DEFINE_integer('sample_freq', 500, 'sample frequence for checking qualitative evaluation, default: 500')
+tf.flags.DEFINE_integer('sample_freq', 1000, 'sample frequence for checking qualitative evaluation, default: 1000')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
 tf.flags.DEFINE_integer('save_freq', 50000, 'save frequency for model, default: 50000')
 tf.flags.DEFINE_string('load_model', None, 'folder of saved model that you wish to continue training '
@@ -101,6 +101,24 @@ def main(_):
 
 
 def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
+    # imgs, _, segs = solver.data.train_random_batch(batch_size=8)
+    # masks = solver.sess.run(solver.model.iris_mask, feed_dict={solver.model.mask_tfph: segs})
+    #
+    # print('img shape: {}'.format(masks.shape))
+    # import cv2
+    # import numpy as np
+    #
+    # for i in range(imgs.shape[0]):
+    #     img = imgs[i]
+    #     seg = segs[i]
+    #     mask = masks[i]
+    #
+    #     cv2.imshow('Img', img.astype(np.uint8))
+    #     cv2.imshow('Seg', seg.astype(np.uint8))
+    #     cv2.imshow('Iris mask', (mask*255.).astype(np.uint8))
+    #
+    #     if cv2.waitKey(0) & 0xFF == 27:
+    #         exit('Esc clicked!')
     iter_time = 0
     total_iters = solver.iters
 
@@ -157,9 +175,6 @@ def test(solver, evaluator, model_dir, log_dir, test_dir):
 
         utils.save_imgs(img_stores=[imgs[i:i+1], segs[i:i+1], outputs[i:i+1]], save_dir=test_dir,
                         img_name=os.path.basename(solver.data.test_paths[i]), is_vertical=False, margin=0)
-
-
-
 
 
 if __name__ == '__main__':

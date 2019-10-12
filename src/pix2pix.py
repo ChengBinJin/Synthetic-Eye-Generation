@@ -31,6 +31,7 @@ class Pix2pix(object):
         self.log_dir = log_dir
         self.name = name
         self.tb_lr = None
+        self.iris_value = tf.reshape(tf.constant([204.], dtype=tf.float32), shape=(1, 1, 1, 1))
 
         self.logger = logging.getLogger(__name__)  # logger
         self.logger.setLevel(logging.INFO)
@@ -62,7 +63,7 @@ class Pix2pix(object):
 
         # Define generator loss
         self.gen_adv_loss = self.generator_loss(self.dis_obj, self.fake_pair)
-        self.cond_loss = self.conditional_loss(pred=fake_img, gt=real_img)
+        self.cond_loss = self.conditional_loss(pred=fake_img, gt=real_img, mask=self.mask_tfph)
         self.gen_loss = self.gen_adv_loss + self.cond_loss
 
         # Define discriminator loss
@@ -107,12 +108,23 @@ class Pix2pix(object):
                                                                            labels=tf.ones_like(d_logit_fake)))
         return loss
 
-    def conditional_loss(self, pred, gt):
+    def conditional_loss(self, pred, gt, mask=None):
         loss = tf.constant(0., dtype=tf.float32)
-        if self.gen_mode == 2:
+
+        if self.gen_mode == 2:      # whole-constraint
             cond_loss = tf.math.reduce_mean(tf.math.abs(pred - gt))
             loss = self.labmda_1 * cond_loss
+        elif self.gen_mode == 3:    # iris-constraint
+            iris_region = self.extract_iris_region(mask)
+            cond_loss = tf.math.reduce_mean(tf.math.abs(iris_region * (pred - gt)))
+            loss = self.labmda_1 * cond_loss
+
         return loss
+
+    def extract_iris_region(self, seg_mask):
+        mask = tf.math.reduce_sum(tf.dtypes.cast(tf.math.equal(seg_mask, self.iris_value), dtype=tf.float32),
+                                  axis=-1, keepdims=True)
+        return mask
 
     @staticmethod
     def discriminator_loss(dis_obj, real_img, fake_img):
