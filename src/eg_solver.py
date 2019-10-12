@@ -108,7 +108,7 @@ class Solver(object):
 
             feed = {
                 self.model.mask_tfph: seg_tests,
-                self.model.rate_tfph: 0.5,
+                self.model.rate_tfph: 0.,  # rate: 1 - keep_prob
             }
 
             samples = self.sess.run(self.model.g_sample, feed_dict=feed)
@@ -270,6 +270,34 @@ class Evaluator(object):
         accuracy, metric_summary_op = self.sess.run([self.model.accuracy_metric, self.model.metric_summary_op])
 
         return accuracy * 100.
+
+    def test_top_k(self, segs_all, imgs_all, clses_all, log_dir, batch_size=20):
+        preds = np.zeros((self.data.num_test_imgs, self.data.num_identities), np.float32)
+
+        for i, index in enumerate(range(0, self.data.num_test_imgs, batch_size)):
+            print('[{}/{}] processing...'.format(i + 1, (self.data.num_test_imgs // batch_size) + 1))
+
+            if index + batch_size < self.data.num_test_imgs:
+                imgs = imgs_all[index:index + batch_size, :, :, :]
+                segs = segs_all[index:index + batch_size, :, :, :]
+                batch_clses = clses_all[index:index + batch_size, :]
+            else:
+                imgs = imgs_all[index:, :, :, :]
+                segs = segs_all[index:, :, :, :]
+                batch_clses = clses_all[index:, :]
+
+            num_imgs = imgs.shape[0]
+            batch_imgs = utils.extract_iris(imgs, segs)
+
+            feed = {
+                self.model.img_tfph: batch_imgs,
+                self.model.gt_tfph: batch_clses,
+                self.model.train_mode: False
+            }
+
+            preds[index:index + num_imgs, :] = self.sess.run(self.model.preds, feed_dict=feed)
+
+        np.savetxt(os.path.join(log_dir, 'preds.csv'), preds, delimiter=",")
 
     def load_model(self, model_dir):
         print(' [*] Reading identification checkpoint...')

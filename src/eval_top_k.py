@@ -11,16 +11,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy import genfromtxt
 
-from dataset import Dataset
+from ii_dataset import Dataset
 
 parser = argparse.ArgumentParser(description='')
-parser.add_argument('--load_models', dest='load_models', type=list, default=['20190919-202335', '20190921-111742'],
+parser.add_argument('--load_models', dest='load_models', type=list, default=['20191005-114919'],
                     help='model directory')
+parser.add_argument('--task', dest='task', type=str, default='generation', help='select from [identification, generation]')
 args = parser.parse_args()
 
-PATH = '../log/identification/'
+PATH = os.path.join('../log', args.task)  #../log/identification/'
 
-def main(load_models, save_dir='../debug', num_identities=122):
+def main(load_models, save_dir='../experiments', num_identities=122):
     top_k_accs = np.zeros((num_identities, len(load_models)), np.float32)
 
     # Read test labels
@@ -28,6 +29,9 @@ def main(load_models, save_dir='../debug', num_identities=122):
     gt_labels = np.asarray([data.convert_to_cls(test_path) for test_path in data.test_paths])
 
     for iter_, load_model in enumerate(load_models):
+        print('load_model: {}'.format(load_model))
+        print('path: {}'.format(os.path.join(PATH, load_model, 'preds.csv')))
+
         # Read saved prediction scores
         preds = genfromtxt(os.path.join(PATH, load_model, 'preds.csv'), delimiter=',')
         num_imgs = preds.shape[0]
@@ -56,20 +60,20 @@ def main(load_models, save_dir='../debug', num_identities=122):
 
         print('Model: {}, AUC: {:.4}'.format(load_model, (np.sum(top_k_accs[:, iter_] / (100. * num_identities)))))
 
-    save_fig(top_k_accs, save_dir)
+        save_fig(top_k_accs, save_dir, load_model)
 
 
-
-
-def save_fig(top_k_acc, save_dir):
+def save_fig(top_k_acc, save_dir, load_model):
     # Parameters
-    colors = ['tomato', 'lawngreen']
-    groups = ['Standard', 'Standard with data augmentation']
-    linestyles = [':', '-.']
+    colors = ['tomato', 'lawngreen', 'dodgerblue', 'darkviolet']
+    groups = ['IrisGAN without any-constraint', 'IrisGAN with whole-constraint',
+              'IrisGAN with iris-constraint', 'IrisGAN with iris-preserving']
+    # linestyles = [':', '-.']
 
     fig, ax = plt.subplots(figsize=(16, 8))
     for i in range(top_k_acc.shape[1]):
-        ax.plot(top_k_acc[:, i], color=colors[i], linewidth=4.0, label=groups[i], linestyle=linestyles[i])
+        # ax.plot(top_k_acc[:, i], color=colors[i], linewidth=4.0, label=groups[i], linestyle=linestyles[i])
+        ax.plot(top_k_acc[:, i], color=colors[i], linewidth=4.0, label=groups[i])
 
     ax.set_xlabel('Rank', fontsize=16)
     ax.set_ylabel('Identification Accuracy', fontsize=16)
@@ -88,7 +92,7 @@ def save_fig(top_k_acc, save_dir):
     plt.legend(loc='lower right', fontsize=14)
     plt.grid(True)
     fig.tight_layout()
-    plt.savefig(os.path.join(save_dir, 'test.png'), dpi=600)
+    plt.savefig(os.path.join(save_dir, load_model + '.png'), dpi=600)
     plt.close()
 
 

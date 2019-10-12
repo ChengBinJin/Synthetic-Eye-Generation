@@ -97,7 +97,7 @@ def main(_):
     if FLAGS.is_train is True:
         train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
     else:
-        test(solver, evaluator, model_dir, test_dir)
+        test(solver, evaluator, model_dir, log_dir, test_dir)
 
 
 def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
@@ -138,24 +138,26 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
         iter_time += 1
 
 
-def test(solver, evaluator, model_dir, test_dir):
+def test(solver, evaluator, model_dir, log_dir, test_dir):
     if FLAGS.load_model is not None:
-        flag, iter_time, best_acc = solver.load_model(logger=None, model_dir=model_dir, is_train=False)
+        flag, iter_time = solver.load_model(logger=None, model_dir=model_dir, is_train=False)
 
         if flag is True:
             print(' [!] Load Success! Iter: {}'.format(iter_time))
-            print('Best Acc.: {:.3f}%'.format(best_acc))
         else:
             exit(' [!] Failed to restore model {}'.format(FLAGS.load_gan_model))
 
     segs, outputs, clses, imgs = solver.generate_test_imgs()
-    acc = evaluator.eval_test(segs, outputs, clses)
+    acc = evaluator.test_top_k(segs, outputs, clses, log_dir)
 
+    print('Saving imgs...')
     for i in range(segs.shape[0]):
-        utils.save_imgs(img_stores=[segs[i:i+1], outputs[i:i+1], imgs[i:i+1]], save_dir=test_dir,
-                        img_name=os.path.basename(solver.data.test_paths[i]), is_vertical=False)
+        if i % 100 == 0:
+            print('[{}/{}] saving...'.format(i, segs.shape[0]))
 
-    print('Test acc: {:.3f}%'.format(acc))
+        utils.save_imgs(img_stores=[imgs[i:i+1], segs[i:i+1], outputs[i:i+1]], save_dir=test_dir,
+                        img_name=os.path.basename(solver.data.test_paths[i]), is_vertical=False, margin=0)
+
 
 
 

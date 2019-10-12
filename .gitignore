@@ -5,3 +5,5 @@ model/
 debug/
 sample/
 backup/
+test/
+experiments
