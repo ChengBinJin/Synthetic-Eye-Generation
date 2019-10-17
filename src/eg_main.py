@@ -92,33 +92,15 @@ def main(_):
     solver = Solver(flags=FLAGS, log_dir=log_dir)
 
     # Intialize evaluator
-    evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
+    # evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
 
-    if FLAGS.is_train is True:
-        train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
-    else:
-        test(solver, evaluator, model_dir, log_dir, test_dir)
+    # if FLAGS.is_train is True:
+    #     train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
+    # else:
+    #     test(solver, evaluator, model_dir, log_dir, test_dir)
 
 
 def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
-    # imgs, _, segs = solver.data.train_random_batch(batch_size=8)
-    # masks = solver.sess.run(solver.model.iris_mask, feed_dict={solver.model.mask_tfph: segs})
-    #
-    # print('img shape: {}'.format(masks.shape))
-    # import cv2
-    # import numpy as np
-    #
-    # for i in range(imgs.shape[0]):
-    #     img = imgs[i]
-    #     seg = segs[i]
-    #     mask = masks[i]
-    #
-    #     cv2.imshow('Img', img.astype(np.uint8))
-    #     cv2.imshow('Seg', seg.astype(np.uint8))
-    #     cv2.imshow('Iris mask', (mask*255.).astype(np.uint8))
-    #
-    #     if cv2.waitKey(0) & 0xFF == 27:
-    #         exit('Esc clicked!')
     iter_time = 0
     total_iters = solver.iters
 
@@ -134,7 +116,10 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
     tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
     while iter_time < total_iters:
-        gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
+        if FLAGS.gen_mode != 4:
+            gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
+        else:
+            gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train(evaluator)
 
         # Print loss information
         if iter_time % FLAGS.print_freq == 0:

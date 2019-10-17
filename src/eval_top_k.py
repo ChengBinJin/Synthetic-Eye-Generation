@@ -14,7 +14,7 @@ from numpy import genfromtxt
 from ii_dataset import Dataset
 
 parser = argparse.ArgumentParser(description='')
-parser.add_argument('--load_models', dest='load_models', type=list, default=['20191005-114919'],
+parser.add_argument('--load_models', dest='load_models', type=list, default=['20191013-095352'],
                     help='model directory')
 parser.add_argument('--task', dest='task', type=str, default='generation', help='select from [identification, generation]')
 args = parser.parse_args()
