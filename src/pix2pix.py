@@ -112,7 +112,7 @@ class Pix2pix(object):
 
             # Define generator loss
             self.gen_adv_loss = self.generator_loss(self.dis_obj, self.fake_pair)
-            self.cond_loss = self.conditional_loss(pred=fake_img, gt=real_img, mask=self.mask_tfph)
+            self.cond_loss = self.conditional_loss(pred_img=fake_img, gt=real_img, mask=self.mask_tfph)
             self.gen_loss = self.gen_adv_loss + self.cond_loss
 
             # Define discriminator loss
@@ -157,19 +157,20 @@ class Pix2pix(object):
                                                                            labels=tf.ones_like(d_logit_fake)))
         return loss
 
-    def conditional_loss(self, pred, gt, mask=None):
+    def conditional_loss(self, pred_img, gt, mask=None):
         loss = tf.constant(0., dtype=tf.float32)
 
         if self.gen_mode == 2:      # whole-constraint
-            cond_loss = tf.math.reduce_mean(tf.math.abs(pred - gt))
+            cond_loss = tf.math.reduce_mean(tf.math.abs(pred_img - gt))
             loss = self.labmda_1 * cond_loss
         elif self.gen_mode == 3:    # iris-constraint
             iris_region = self.extract_iris_region(mask)
-            cond_loss = tf.math.reduce_mean(tf.math.abs(iris_region * (pred - gt)))
+            cond_loss = tf.math.reduce_mean(tf.math.abs(iris_region * (pred_img - gt)))
             loss = self.labmda_1 * cond_loss
         elif self.gen_mode == 4:    # cls-constraint
+            # This is for solving the scope become ResNet18/... not pix2pix/ResNet18/...
             with tf.compat.v1.variable_scope(self.top_scope):  # resets the current scope!
-                cls_preds, _ = self.iden_model.forward_network(input_img=pred, reuse=True)
+                cls_preds, _ = self.iden_model.forward_network(input_img=pred_img, reuse=True)
 
             loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                 logits=cls_preds,
