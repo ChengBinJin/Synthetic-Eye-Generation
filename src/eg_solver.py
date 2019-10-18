@@ -16,7 +16,7 @@ from pix2pix import Pix2pix
 
 
 class Solver(object):
-    def __init__(self, data, gen_model, flags, log_dir=None):
+    def __init__(self, data, gen_model, flags, session, log_dir=None):
         self.data = data
         self.model = gen_model
         # Initialize dataset
@@ -25,9 +25,10 @@ class Solver(object):
         # self.iters = flags.epoch * self.data.num_train_imgs
         self.flags = flags
         self.batch_size = self.flags.batch_size
+        self.sess = session
         self.log_dir = log_dir
 
-        self.sess = tf.compat.v1.Session()
+        # self.sess = tf.compat.v1.Session()
         self._init_gen_variables()
 
     def _init_gen_variables(self):
@@ -40,8 +41,9 @@ class Solver(object):
         #                      lambda_1=self.flags.lambda_1,
         #                      num_class=self.data.num_seg_class)
 
-        var_list = [var for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope='G')] + \
-                   [var for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope='D')]
+        # var_list = [var for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope='G')] + \
+        #            [var for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope='D')]
+        var_list = [var for var in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES, scope='pix2pix')]
         self.sess.run(tf.compat.v1.variables_initializer(var_list=var_list))
 
     # def load_model(self, model_dir):
@@ -85,38 +87,25 @@ class Solver(object):
     #             self.saver = tf.compat.v1.train.Saver(max_to_keep=1)
 
     def train(self):
-        imgs, clses, segs = self.data.train_random_batch(batch_size=self.batch_size)
-        iris_imgs = utils.extract_iris(imgs, segs)
+        imgs, clses, segs, irises = self.data.train_random_batch_include_iris(batch_size=self.batch_size)
 
-        import cv2
-        for i in range(self.batch_size):
-            img = imgs[i]
-            cls = clses[i]
-            seg = segs[i]
-            iris_img = iris_imgs[i]
+        feed = {self.model.img_tfph: imgs,
+                self.model.mask_tfph: segs,
+                self.model.cls_tfph: clses,
+                self.model.rate_tfph: 0.5,
+                self.model.iden_model.img_tfph: irises,
+                self.model.iden_model.train_mode: False}
 
-            cv2.imshow('img', img.astype(np.uint8))
-            cv2.imshow('seg', seg.astype(np.uint8))
-            cv2.imshow('iris', iris_img.astype(np.uint8))
-            print('cls: {}'.format(cls))
+        self.sess.run(self.model.dis_optim, feed_dict=feed)
+        self.sess.run(self.model.gen_optim, feed_dict=feed)
 
-            if cv2.waitKey(0) & 0xFF == 27:
-                exit('Esc clicked!')
+        # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
+        _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary = self.sess.run(
+            [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
+             self.model.dis_loss, self.model.summary_op], feed_dict=feed)
 
-        # feed = {self.model.img_tfph: imgs,
-        #         self.model.mask_tfph: segs,
-        #         self.model.rate_tfph: 0.5}
-        #
-        # self.sess.run(self.model.dis_optim, feed_dict=feed)
-        # self.sess.run(self.model.gen_optim, feed_dict=feed)
-        #
-        # # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-        # _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary = self.sess.run(
-        #     [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
-        #      self.model.dis_loss, self.model.summary_op], feed_dict=feed)
-        #
-        # return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
-    #
+        return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
+
     # def generate_val_imgs(self, batch_size=10):
     #     print(' [*] Generate validation imgs...')
     #

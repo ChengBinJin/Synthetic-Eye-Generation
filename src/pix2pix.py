@@ -18,6 +18,7 @@ class Pix2pix(object):
                  is_train=True, log_dir=None, lambda_1=100., num_class=4, num_identities=122, name='pix2pix'):
         self.input_img_shape = input_img_shape
         self.output_img_shape = (*self.input_img_shape[0:2], 1)
+        self.iris_shape = (200, 200, 1)
         self.gen_mode = gen_mode
         self.iden_model_dir = iden_model_dir
         self.sess = session
@@ -42,19 +43,19 @@ class Pix2pix(object):
         self.logger.setLevel(logging.INFO)
         utils.init_logger(logger=self.logger, log_dir=self.log_dir, is_train=self.is_train, name=self.name)
 
+        # Initialize the identification network
         if self.gen_mode == 4:
-            self._init_iden_model(self.iden_model_dir)
+            self._init_iden_model()
 
         self._build_graph()         # main graph
         self._best_metrics_record()
         self._init_tensorboard()    # tensorboard
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
-    def _init_iden_model(self, model_dir):
-        self.iden_model = ResNet18(input_img_shape=(200, 200, 1),
+    def _init_iden_model(self):
+        self.iden_model = ResNet18(input_img_shape=self.iris_shape,
                                    num_classes=self.num_identities,
                                    is_train=False)
-        self.iden_model_dir = model_dir
 
         flag, iter_time = self.load_iden_model(os.path.join('../model/identification', self.iden_model_dir))
         if flag is True:
@@ -80,35 +81,46 @@ class Pix2pix(object):
             return False, None
 
     def _build_graph(self):
-        self.mask_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.input_img_shape], name='mask_tfph')
-        self.img_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.output_img_shape], name='img_tfph')
-        self.rate_tfph = tf.compat.v1.placeholder(tf.float32, name='keep_prob_ph')
+        self.top_scope = tf.get_variable_scope()  # top-level scope
 
-        # Initialize generator & discriminator
-        self.gen_obj = Generator(name='G', gen_c=self.gen_c, norm='instance', logger=self.logger, _ops=None)
-        self.dis_obj = Discriminator(name='D', dis_c=self.dis_c, norm='instance', logger=self.logger,  _ops=None)
+        with tf.compat.v1.variable_scope(self.name):
+            self.mask_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.input_img_shape], name='mask_tfph')
+            self.img_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.output_img_shape], name='img_tfph')
+            self.rate_tfph = tf.compat.v1.placeholder(tf.float32, name='keep_prob_ph')
+            self.cls_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.int64, shape=[None, 1])
 
-        # Transform img_train and seg_img_train
-        input_mask = self.transform_img(self.mask_tfph)
-        real_img = self.transform_img(self.img_tfph)
+            # Initialize generator & discriminator
+            self.gen_obj = Generator(name='G', gen_c=self.gen_c, norm='instance',
+                                     logger=self.logger, _ops=None)
+            self.dis_obj = Discriminator(name='D', dis_c=self.dis_c, norm='instance',
+                                         logger=self.logger,  _ops=None)
 
-        # Concatenation
-        fake_img = self.gen_obj(input_mask, self.rate_tfph)
-        self.g_sample = self.inv_transform_img(fake_img)
-        self.real_pair = tf.concat([input_mask, real_img], axis=3)
-        self.fake_pair = tf.concat([input_mask, fake_img], axis=3)
+            # Transform img_train and seg_img_train
+            input_mask = self.transform_img(self.mask_tfph)
+            real_img = self.transform_img(self.img_tfph)
 
-        # Define generator loss
-        self.gen_adv_loss = self.generator_loss(self.dis_obj, self.fake_pair)
-        self.cond_loss = self.conditional_loss(pred=fake_img, gt=real_img, mask=self.mask_tfph)
-        self.gen_loss = self.gen_adv_loss + self.cond_loss
+            # Generator
+            if self.gen_mode == 4:
+                fake_img = self.gen_obj(input_mask, self.rate_tfph, self.iden_model.feat, gen_mode=self.gen_mode)
+            else:
+                fake_img = self.gen_obj(input_mask, self.rate_tfph)
 
-        # Define discriminator loss
-        self.dis_loss = self.discriminator_loss(self.dis_obj, self.real_pair, self.fake_pair)
+            # Concatenation
+            self.g_sample = self.inv_transform_img(fake_img)
+            self.real_pair = tf.concat([input_mask, real_img], axis=3)
+            self.fake_pair = tf.concat([input_mask, fake_img], axis=3)
 
-        # Optimizers
-        self.gen_optim = self.init_optimizer(loss=self.gen_loss, variables=self.gen_obj.variables, name='Adam_gen')
-        self.dis_optim = self.init_optimizer(loss=self.dis_loss, variables=self.dis_obj.variables, name='Adam_dis')
+            # Define generator loss
+            self.gen_adv_loss = self.generator_loss(self.dis_obj, self.fake_pair)
+            self.cond_loss = self.conditional_loss(pred=fake_img, gt=real_img, mask=self.mask_tfph)
+            self.gen_loss = self.gen_adv_loss + self.cond_loss
+
+            # Define discriminator loss
+            self.dis_loss = self.discriminator_loss(self.dis_obj, self.real_pair, self.fake_pair)
+
+            # Optimizers
+            self.gen_optim = self.init_optimizer(loss=self.gen_loss, variables=self.gen_obj.variables, name='Adam_gen')
+            self.dis_optim = self.init_optimizer(loss=self.dis_loss, variables=self.dis_obj.variables, name='Adam_dis')
 
     def _best_metrics_record(self):
         self.best_acc_tfph = tf.compat.v1.placeholder(tf.float32, name='best_acc')
@@ -155,6 +167,13 @@ class Pix2pix(object):
             iris_region = self.extract_iris_region(mask)
             cond_loss = tf.math.reduce_mean(tf.math.abs(iris_region * (pred - gt)))
             loss = self.labmda_1 * cond_loss
+        elif self.gen_mode == 4:    # cls-constraint
+            with tf.compat.v1.variable_scope(self.top_scope):  # resets the current scope!
+                cls_preds, _ = self.iden_model.forward_network(input_img=pred, reuse=True)
+
+            loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
+                logits=cls_preds,
+                labels=self.convert_one_hot(self.cls_tfph)))
 
         return loss
 
@@ -193,6 +212,12 @@ class Pix2pix(object):
         img = (img + 1.) * 127.5
         return img
 
+    def convert_one_hot(self, data):
+        data = tf.dtypes.cast(data, dtype=tf.uint8)
+        data = tf.one_hot(data, depth=self.num_identities, name='one_hot')
+        data = tf.reshape(data, shape=[-1, self.num_identities])
+        return data
+
 
 class Generator(object):
     def __init__(self, name=None, gen_c=None, norm='instance', logger=None, _ops=None):
@@ -203,7 +228,7 @@ class Generator(object):
         self._ops = _ops
         self.reuse = False
 
-    def __call__(self, x, keep_rate=0.5):
+    def __call__(self, x, keep_rate=0.5, iris_feat=None, gen_mode=0):
         with tf.compat.v1.variable_scope(self.name, reuse=self.reuse):
             tf_utils.print_activations(x, logger=self.logger)
 
@@ -253,6 +278,13 @@ class Generator(object):
                                         name='e7_conv2d')
             e7_batchnorm = tf_utils.norm(e7_conv2d, _type=self.norm, _ops=self._ops, logger=self.logger, name='e7_norm')
             e7_relu = tf_utils.lrelu(e7_batchnorm, logger=self.logger, name='e7_relu')
+
+            # ID preserving feature
+            if gen_mode == 4:
+                iris_feat = tf.reshape(iris_feat, shape=(-1, 1, 1, iris_feat.get_shape()[-1]), name='iris_feat')
+                iris_feat = tf.concat(values=[iris_feat, iris_feat], axis=1, name='iris_feat_concat')
+                e7_relu = tf.concat([e7_relu, iris_feat], axis=3, name='id_preserving')
+                tf_utils.print_activations(e7_relu)
 
             # D0: (2, 1) -> (3, 2)
             # Stage1: (2, 1) -> (4, 2)
@@ -348,7 +380,7 @@ class Generator(object):
 
             # Set reuse=True for next call
             self.reuse = True
-            self.variables = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
+            self.variables = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope='pix2pix/'+self.name)
 
         return output
 
@@ -395,7 +427,7 @@ class Discriminator(object):
 
             # set reuse=True for next call
             self.reuse = True
-            self.variables = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
+            self.variables = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES, scope='pix2pix/'+self.name)
 
         return output
 

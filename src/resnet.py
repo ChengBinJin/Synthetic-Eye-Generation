@@ -46,7 +46,7 @@ class ResNet18(object):
         self.train_mode = tf.compat.v1.placeholder(dtype=tf.dtypes.bool, name='train_mode_ph')
 
         # Network forward for training
-        self.preds = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
+        self.preds, self.feat = self.forward_network(input_img=self.normalize(self.img_tfph), reuse=False)
         self.preds_cls = tf.math.argmax(self.preds, axis=-1)
 
     def _build_graph(self):
@@ -156,7 +156,10 @@ class ResNet18(object):
             inputs = tf_utils.flatten(inputs, name='flatten', logger=self.logger)
             logits = tf_utils.linear(inputs, self.num_classes, name='logits')
 
-            return logits
+            if self.is_train:
+                return logits
+            else:
+                return logits, inputs
 
     def block_layer(self, inputs, filters, block_fn, blocks, strides, train_mode, name):
         # Only the first block per block_layer uses projection_shortcut and strides
