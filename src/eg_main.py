@@ -6,16 +6,19 @@
 # -------------------------------------------------------------------------
 import os
 import logging
+import numpy as np
 import tensorflow as tf
 from datetime import datetime
 
 import utils as utils
-from eg_solver import Solver, Evaluator
+from eg_solver import Solver  # , Evaluator
+from pix2pix import Pix2pix
+import eg_dataset as eg_dataset
 
 
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_string('gpu_index', '0', 'gpu index if you have multiple gpus, default: 0')
-tf.flags.DEFINE_integer('gen_mode', 1, 'generation mode selection from [1|2|3|4], default: 1')
+tf.flags.DEFINE_integer('gen_mode', 4, 'generation mode selection from [1|2|3|4], default: 4')
 tf.flags.DEFINE_integer('batch_size', 1, 'batch size for one iteration, default: 1')
 tf.flags.DEFINE_float('resize_factor', 0.5, 'resize original input image, default: 0.5')
 tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
@@ -88,21 +91,40 @@ def main(_):
     utils.init_logger(logger=logger, log_dir=log_dir, is_train=FLAGS.is_train, name='main')
     print_main_parameters(logger, flags=FLAGS, is_train=FLAGS.is_train)
 
+    # Initialize Session
+    sess = tf.compat.v1.Session()
+
+    # Initialize dataset
+    data = eg_dataset.Dataset(name='generation', resize_factor=FLAGS.resize_factor,
+                              is_train=FLAGS.is_train, log_dir=log_dir,  is_debug=False)
+
+    # Initialize model
+    pix2pix = Pix2pix(input_img_shape=data.input_img_shape,
+                      gen_mode=FLAGS.gen_mode,
+                      iden_model_dir=FLAGS.load_iden_model,
+                      session=sess,
+                      lr=FLAGS.learning_rate,
+                      total_iters=int(np.ceil((FLAGS.epoch * data.num_train_imgs) / FLAGS.batch_size)),
+                      is_train=FLAGS.is_train,
+                      log_dir=log_dir,
+                      lambda_1=FLAGS.lambda_1,
+                      num_class=data.num_seg_class)
+
     # Initialize solver
-    solver = Solver(flags=FLAGS, log_dir=log_dir)
+    solver = Solver(data=data, gen_model=pix2pix, flags=FLAGS, log_dir=log_dir)
 
     # Intialize evaluator
     # evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
 
-    # if FLAGS.is_train is True:
-    #     train(solver, evaluator, logger, model_dir, log_dir, sample_dir)
+    if FLAGS.is_train is True:
+        train(solver, logger, model_dir, log_dir, sample_dir)
     # else:
     #     test(solver, evaluator, model_dir, log_dir, test_dir)
 
 
-def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
+def train(solver, logger, model_dir, log_dir, sample_dir):
     iter_time = 0
-    total_iters = solver.iters
+    total_iters = int(np.ceil((FLAGS.epoch * solver.data.num_train_imgs) / FLAGS.batch_size))
 
     if FLAGS.load_model is not None:
         flag, iter_time = solver.load_model(logger=logger, model_dir=model_dir, is_train=True)
@@ -116,29 +138,27 @@ def train(solver, evaluator, logger, model_dir, log_dir, sample_dir):
     tb_writer = tf.compat.v1.summary.FileWriter(logdir=log_dir, graph=solver.sess.graph_def)
 
     while iter_time < total_iters:
-        if FLAGS.gen_mode != 4:
-            gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
-        else:
-            gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train(evaluator)
+        # gen_loss, adv_loss, cond_loss, dis_loss, summary = solver.train()
+        solver.train()
 
-        # Print loss information
-        if iter_time % FLAGS.print_freq == 0:
-            # Write to tensorboard
-            tb_writer.add_summary(summary, iter_time)
-            tb_writer.flush()
-
-            msg = "[{0:7} / {1:7}] Dis_loss: {2:.5f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss: {5:.3f}"
-            print(msg.format(iter_time, total_iters, dis_loss, gen_loss, adv_loss, cond_loss))
-
-        # Sampling generated imgs
-        if iter_time % FLAGS.sample_freq == 0:
-            solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
-
-        # Evaluating
-        if (iter_time % FLAGS.save_freq == 0) or (iter_time + 1 == total_iters):
-            solver.save_model(logger, model_dir, iter_time)
-
-        iter_time += 1
+        # # Print loss information
+        # if iter_time % FLAGS.print_freq == 0:
+        #     # Write to tensorboard
+        #     tb_writer.add_summary(summary, iter_time)
+        #     tb_writer.flush()
+        #
+        #     msg = "[{0:7} / {1:7}] Dis_loss: {2:.5f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss: {5:.3f}"
+        #     print(msg.format(iter_time, total_iters, dis_loss, gen_loss, adv_loss, cond_loss))
+        #
+        # # Sampling generated imgs
+        # if iter_time % FLAGS.sample_freq == 0:
+        #     solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
+        #
+        # # Evaluating
+        # if (iter_time % FLAGS.save_freq == 0) or (iter_time + 1 == total_iters):
+        #     solver.save_model(logger, model_dir, iter_time)
+        #
+        # iter_time += 1
 
 
 def test(solver, evaluator, model_dir, log_dir, test_dir):

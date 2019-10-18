@@ -4,22 +4,27 @@
 # Written by Cheng-Bin Jin
 # Email: sbkim0407@gmail.com
 # -------------------------------------------------------------------------
+import os
 import logging
 import tensorflow as tf
 
 import utils as utils
+from resnet import ResNet18
 import tensorflow_utils as tf_utils
 
 
 class Pix2pix(object):
-    def __init__(self, input_img_shape=(320, 200, 1), gen_mode=1, lr=2e-4, total_iters=2e5, is_train=True,
-                 log_dir=None, lambda_1=100., num_class=4, name='pix2pix'):
+    def __init__(self, input_img_shape=(320, 200, 1), gen_mode=1, iden_model_dir=None, session=None, lr=2e-4, total_iters=2e5,
+                 is_train=True, log_dir=None, lambda_1=100., num_class=4, num_identities=122, name='pix2pix'):
         self.input_img_shape = input_img_shape
         self.output_img_shape = (*self.input_img_shape[0:2], 1)
         self.gen_mode = gen_mode
+        self.iden_model_dir = iden_model_dir
+        self.sess = session
         self.is_train = is_train
         self.labmda_1 = lambda_1
         self.num_class = num_class
+        self.num_identities = num_identities
         self.gen_c = [64, 128, 256, 512, 512, 512, 512, 512,
                       512, 512, 512, 512, 256, 128, 64, self.output_img_shape[2]]
         self.dis_c = [64, 128, 256, 512, 1]
@@ -37,10 +42,42 @@ class Pix2pix(object):
         self.logger.setLevel(logging.INFO)
         utils.init_logger(logger=self.logger, log_dir=self.log_dir, is_train=self.is_train, name=self.name)
 
+        if self.gen_mode == 4:
+            self._init_iden_model(self.iden_model_dir)
+
         self._build_graph()         # main graph
         self._best_metrics_record()
         self._init_tensorboard()    # tensorboard
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
+
+    def _init_iden_model(self, model_dir):
+        self.iden_model = ResNet18(input_img_shape=(200, 200, 1),
+                                   num_classes=self.num_identities,
+                                   is_train=False)
+        self.iden_model_dir = model_dir
+
+        flag, iter_time = self.load_iden_model(os.path.join('../model/identification', self.iden_model_dir))
+        if flag is True:
+            print(' [!] Loadd IdenModel Success! Iter: {}'.format(iter_time))
+        else:
+            exit(' [!] Failed to restore IdenModel {}'.format(self.load_iden_model))
+
+    def load_iden_model(self, model_dir):
+        print(' [*] Reading {} checkpoint...'.format(model_dir))
+
+        saver = tf.compat.v1.train.Saver(max_to_keep=1)
+        ckpt = tf.train.get_checkpoint_state(model_dir)
+
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            saver.restore(self.sess, os.path.join(model_dir, ckpt_name))
+
+            meta_graph_path = ckpt.model_checkpoint_path + '.meta'
+            iter_time = int(meta_graph_path.split('-')[-1].split('.')[0])
+
+            return True, iter_time
+        else:
+            return False, None
 
     def _build_graph(self):
         self.mask_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.input_img_shape], name='mask_tfph')
