@@ -90,14 +90,16 @@ class Dataset(object):
 
     def train_random_batch_include_iris(self, batch_size):
         img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
-        train_imgs, train_labels, train_segs, train_irises = self.read_data_include_iris(img_paths, is_augment=True)
-        return train_imgs, train_labels, train_segs, train_irises
+        train_imgs, train_labels, train_segs, train_irises, train_coords = \
+            self.read_data_include_iris(img_paths, is_augment=True)
+        return train_imgs, train_labels, train_segs, train_irises, train_coords
 
     def read_data_include_iris(self, img_paths, is_augment=False):
         batch_imgs = np.zeros((len(img_paths), *self.output_img_shape), dtype=np.float32)
         batch_segs = np.zeros((len(img_paths), *self.input_img_shape), dtype=np.float32)
         batch_irises = np.zeros((len(img_paths), *self.iris_shape), dtype=np.float32)
         batch_labels = np.zeros((len(img_paths), 1), dtype=np.uint8)
+        batch_coords = np.zeros((len(img_paths), 4), dtype=np.int32)
 
         for i, img_path in enumerate(img_paths):
             # Read img and seg
@@ -105,23 +107,24 @@ class Dataset(object):
             img = img_combine[:, :self.img_shape[1], 1]
             seg = img_combine[:, self.img_shape[1]:, :]
 
-            # Iris area
-            batch_irises[i, :, :, :] = utils.extract_iris(np.reshape(img, (1, img.shape[0], img.shape[1], 1)),
-                                                          np.expand_dims(seg, axis=0))
-
             # Resize
             img = cv2.resize(img, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_LINEAR)
             seg = cv2.resize(seg, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_NEAREST)
+            # batch_coords[i, :] = int(np.round(batch_coords[i, :] * self.resize_factor))
 
             # Data augmentation
             if is_augment:
                 img, seg = self.data_augmentation(img, seg)
 
+            # Iris area
+            batch_irises[i, :, :, :], batch_coords[i, :] = utils.extract_iris(
+                np.reshape(img, (1, img.shape[0], img.shape[1], 1)), np.expand_dims(seg, axis=0))
+
             batch_imgs[i, :, :, 0] = img
             batch_segs[i, :, :, :] = seg
             batch_labels[i] = self.convert_to_cls(img_path)
 
-        return batch_imgs, batch_labels, batch_segs, batch_irises
+        return batch_imgs, batch_labels, batch_segs, batch_irises, batch_coords
 
     def direct_batch(self, batch_size, index, stage='train'):
         if stage == 'train':
@@ -163,9 +166,9 @@ class Dataset(object):
         else:
             img_paths = all_paths[index:]
 
-        imgs, labels, segs, irises = self.read_data_include_iris(img_paths, is_augment=False)
+        imgs, labels, segs, irises, coords = self.read_data_include_iris(img_paths, is_augment=False)
 
-        return imgs, labels, segs, irises
+        return imgs, labels, segs, irises, coords
 
     def read_data(self, img_paths, is_augment=False):
         batch_imgs = np.zeros((len(img_paths), *self.output_img_shape), dtype=np.float32)

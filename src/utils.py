@@ -215,6 +215,7 @@ def save_imgs(img_stores, iter_time=None, save_dir=None, margin=5, img_name=None
 
 def extract_iris(imgs, segs, margin=5, input_h=200, input_w=200):
     batch_imgs = np.zeros((imgs.shape[0], input_h, input_w, 1), dtype=np.float32)
+    coordinates = np.zeros((imgs.shape[0], 4), dtype=np.int32)
 
     for i in range(imgs.shape[0]):
         img = imgs[i]
@@ -232,5 +233,6 @@ def extract_iris(imgs, segs, margin=5, input_h=200, input_w=200):
 
         # Padding to the required size by preserving ratio of height and width
         batch_imgs[i, :, :, :] = np.expand_dims(padding(crop_img), axis=2)
+        coordinates[i, :] = np.array([new_y, new_x, h+margin, w+margin], dtype=np.int16)
 
-    return batch_imgs
+    return batch_imgs, coordinates

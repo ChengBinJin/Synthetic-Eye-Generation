@@ -15,7 +15,7 @@ import tensorflow_utils as tf_utils
 
 class Pix2pix(object):
     def __init__(self, input_img_shape=(320, 200, 1), gen_mode=1, iden_model_dir=None, session=None, lr=2e-4, total_iters=2e5,
-                 is_train=True, log_dir=None, lambda_1=100., num_class=4, num_identities=122, name='pix2pix'):
+                 is_train=True, log_dir=None, lambda_1=100., num_class=4, num_identities=122, batch_size=1, name='pix2pix'):
         self.input_img_shape = input_img_shape
         self.output_img_shape = (*self.input_img_shape[0:2], 1)
         self.iris_shape = (200, 200, 1)
@@ -35,8 +35,10 @@ class Pix2pix(object):
         self.start_decay_step = int(self.total_steps * 0.5)
         self.decay_steps = self.total_steps - self.start_decay_step
         self.log_dir = log_dir
+        self.batch_size = batch_size
         self.name = name
         self.tb_lr = None
+        self.crop_pred_iris = None
         self.iris_value = tf.reshape(tf.constant([204.], dtype=tf.float32), shape=(1, 1, 1, 1))
 
         self.logger = logging.getLogger(__name__)  # logger
@@ -86,6 +88,7 @@ class Pix2pix(object):
         with tf.compat.v1.variable_scope(self.name):
             self.mask_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.input_img_shape], name='mask_tfph')
             self.img_tfph = tf.compat.v1.placeholder(tf.float32, shape=[None, *self.output_img_shape], name='img_tfph')
+            self.coord_tfph = tf.compat.v1.placeholder(tf.int32, shape=[None, 4], name='coord_tfph')
             self.rate_tfph = tf.compat.v1.placeholder(tf.float32, name='keep_prob_ph')
             self.cls_tfph = tf.compat.v1.placeholder(dtype=tf.dtypes.int64, shape=[None, 1])
 
@@ -170,13 +173,34 @@ class Pix2pix(object):
         elif self.gen_mode == 4:    # cls-constraint
             # This is for solving the scope become ResNet18/... not pix2pix/ResNet18/...
             with tf.compat.v1.variable_scope(self.top_scope):  # resets the current scope!
-                cls_preds, _ = self.iden_model.forward_network(input_img=pred_img, reuse=True)
+                crop_pred_iris = self.crop_iris_region_for_identification(pred_img, mask)
+                cls_preds, _ = self.iden_model.forward_network(input_img=crop_pred_iris, reuse=True)
 
             loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                 logits=cls_preds,
                 labels=self.convert_one_hot(self.cls_tfph)))
 
         return loss
+
+    def crop_iris_region_for_identification(self, pred_img, mask):
+        iris_region = self.extract_iris_region(mask)
+        pred_img = pred_img * iris_region  # masking iris regions others all zero
+
+        _, h, w, d = pred_img.get_shape().as_list()
+        crop_pred_iris_list = list()
+
+        # Crop iris areas
+        for i in range(self.batch_size):
+            pred_single = tf.slice(input_=pred_img, begin=[i, 0, 0, 0], size=[1, h, w, d])
+            crop_pred_iris = tf.slice(input_=pred_single,
+                                      begin=[i, self.coord_tfph[i, 0], self.coord_tfph[i, 1], 0],
+                                      size=[1, self.coord_tfph[i, 2], self.coord_tfph[i, 3], d])
+            crop_pred_iris_list.append(crop_pred_iris)
+
+        self.crop_pred_iris = tf.concat(values=crop_pred_iris_list, axis=3)
+        crop_pred_iris = tf.image.resize(self.crop_pred_iris, size=(self.iris_shape[0], self.iris_shape[1]))
+
+        return crop_pred_iris
 
     def extract_iris_region(self, seg_mask):
         mask = tf.math.reduce_sum(tf.dtypes.cast(tf.math.equal(seg_mask, self.iris_value), dtype=tf.float32),
