@@ -173,8 +173,8 @@ class Pix2pix(object):
         elif self.gen_mode == 4:    # cls-constraint
             # This is for solving the scope become ResNet18/... not pix2pix/ResNet18/...
             with tf.compat.v1.variable_scope(self.top_scope):  # resets the current scope!
-                crop_pred_iris = self.crop_iris_region_for_identification(pred_img, mask)
-                cls_preds, _ = self.iden_model.forward_network(input_img=crop_pred_iris, reuse=True)
+                self.crop_pred_iris = self.crop_iris_region_for_identification(pred_img, mask)
+                cls_preds, _ = self.iden_model.forward_network(input_img=self.crop_pred_iris, reuse=True)
 
             loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                 logits=cls_preds,
@@ -195,12 +195,40 @@ class Pix2pix(object):
             crop_pred_iris = tf.slice(input_=pred_single,
                                       begin=[i, self.coord_tfph[i, 0], self.coord_tfph[i, 1], 0],
                                       size=[1, self.coord_tfph[i, 2], self.coord_tfph[i, 3], d])
-            crop_pred_iris_list.append(crop_pred_iris)
 
-        self.crop_pred_iris = tf.concat(values=crop_pred_iris_list, axis=3)
-        crop_pred_iris = tf.image.resize(self.crop_pred_iris, size=(self.iris_shape[0], self.iris_shape[1]))
+            # Resizing and padding as identifications
+            crop_pred_iris_ = tf.cond(tf.math.greater_equal(x=self.coord_tfph[i, 2], y=self.coord_tfph[i, 3]),
+                                    lambda: self.height_bigger_than_width(
+                                        crop_pred_iris, self.coord_tfph[i, 2], self.coord_tfph[i, 3]),
+                                    lambda: self.width_bigger_than_height(
+                                        crop_pred_iris, self.coord_tfph[i, 2], self.coord_tfph[i, 3]))
 
-        return crop_pred_iris
+            crop_pred_iris_list.append(crop_pred_iris_)
+
+        crop_pred_irises = tf.concat(values=crop_pred_iris_list, axis=3)
+        crop_pred_irises = tf.reshape(crop_pred_irises, shape=(-1, *self.iris_shape))
+        return crop_pred_irises
+
+    def height_bigger_than_width(self, img, size_h, size_w):
+        ratio = tf.dtypes.cast(self.iris_shape[0] / size_h, dtype=tf.dtypes.float32)
+        new_w = tf.dtypes.cast((ratio * tf.dtypes.cast(size_w, dtype=tf.dtypes.float32)), dtype=tf.dtypes.int32)
+        left_w = tf.dtypes.cast(
+            tf.dtypes.cast((self.iris_shape[1] - new_w), dtype=tf.dtypes.float32) * 0.5, dtype=tf.dtypes.int32)
+        right_w = self.iris_shape[1] - new_w - left_w
+
+        img = tf.image.resize(img, size=(self.iris_shape[0], new_w))
+        img = tf.pad(img, paddings=[[0, 0], [0, 0], [left_w, right_w], [0, 0]])
+        return img
+
+    def width_bigger_than_height(self, img, size_h, size_w):
+        ratio = tf.dtypes.cast(self.iris_shape[1] / size_w, dtype=tf.dtypes.float32)
+        new_h = tf.dtypes.cast((ratio * tf.dtypes.cast(size_h, dtype=tf.dtypes.float32)), dtype=tf.dtypes.int32)
+        upper_h = tf.dtypes.cast(tf.dtypes.cast((self.iris_shape[0] - new_h), dtype=tf.dtypes.float32) * 0.5, dtype=tf.dtypes.int32)
+        bottom_h = self.iris_shape[0] - new_h - upper_h
+
+        img = tf.image.resize(img, size=(new_h, self.iris_shape[1]))
+        img = tf.pad(img, paddings=[[0, 0], [upper_h, bottom_h], [0, 0], [0, 0]])
+        return img
 
     def extract_iris_region(self, seg_mask):
         mask = tf.math.reduce_sum(tf.dtypes.cast(tf.math.equal(seg_mask, self.iris_value), dtype=tf.float32),

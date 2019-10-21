@@ -52,6 +52,7 @@ class Solver(object):
             [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
              self.model.dis_loss, self.model.summary_op, self.model.crop_pred_iris], feed_dict=feed)
 
+        # print(compare_result)
         print('crop_pred_iris shape: {}'.format(crop_pred_iris.shape))
         for i in range(crop_pred_iris.shape[0]):
             iris = crop_pred_iris[i]

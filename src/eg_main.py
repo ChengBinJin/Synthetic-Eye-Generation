@@ -152,7 +152,7 @@ def train(solver, logger, model_dir, log_dir, sample_dir):
         # # Sampling generated imgs
         # if iter_time % FLAGS.sample_freq == 0:
         #     solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
-        #
+
         # # Evaluating
         # if (iter_time % FLAGS.save_freq == 0) or (iter_time + 1 == total_iters):
         #     solver.save_model(logger, model_dir, iter_time)
