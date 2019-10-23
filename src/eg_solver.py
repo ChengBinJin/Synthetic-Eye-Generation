@@ -34,7 +34,6 @@ class Solver(object):
 
     def train(self):
         imgs, clses, segs, irises, coordinates = self.data.train_random_batch_include_iris(batch_size=self.batch_size)
-        print('coordinates: {}'.format(coordinates))
 
         feed = {self.model.img_tfph: imgs,
                 self.model.mask_tfph: segs,
@@ -48,19 +47,9 @@ class Solver(object):
         self.sess.run(self.model.gen_optim, feed_dict=feed)
 
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
-        _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary, crop_pred_iris = self.sess.run(
+        _, g_loss, g_adv_loss, g_cond_loss, d_loss, summary = self.sess.run(
             [self.model.gen_optim, self.model.gen_loss, self.model.gen_adv_loss, self.model.cond_loss,
-             self.model.dis_loss, self.model.summary_op, self.model.crop_pred_iris], feed_dict=feed)
-
-        # print(compare_result)
-        print('crop_pred_iris shape: {}'.format(crop_pred_iris.shape))
-        for i in range(crop_pred_iris.shape[0]):
-            iris = crop_pred_iris[i]
-            iris = (iris + 1.) * 127.5
-
-            cv2.imshow('Img' , iris.astype(np.uint8))
-            if cv2.waitKey(0) & 0xFF == 27:
-                exit('Esc clicked!')
+             self.model.dis_loss, self.model.summary_op], feed_dict=feed)
 
         return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
 
@@ -116,15 +105,16 @@ class Solver(object):
     #
     #     return segs_all, samples_all, clses_all, imgs_all
     #
-    # def img_sample(self, iter_time, save_dir, batch_size=4):
-    #     imgs, _, segs = self.data.train_random_batch(batch_size=batch_size)
-    #     feed = {
-    #             self.model.mask_tfph: segs,
-    #             self.model.rate_tfph: 0.5        # rate: 1 - keep_prob
-    #     }
-    #
-    #     samples = self.sess.run(self.model.g_sample, feed_dict=feed)
-    #     utils.save_imgs(img_stores=[segs, samples, imgs], iter_time=iter_time, save_dir=save_dir, is_vertical=True)
+    def img_sample(self, iter_time, save_dir, batch_size=4):
+        imgs, clses, segs, irises, coordinates = self.data.train_random_batch_include_iris(batch_size=batch_size)
+
+        feed = {self.model.mask_tfph: segs,
+                self.model.rate_tfph: 0.5,                  # rate: 1 - keep_prob
+                self.model.iden_model.img_tfph: irises,
+                self.model.iden_model.train_mode: False}
+
+        samples = self.sess.run(self.model.g_sample, feed_dict=feed)
+        utils.save_imgs(img_stores=[segs, samples, imgs], iter_time=iter_time, save_dir=save_dir, is_vertical=True)
     #
     # def set_best_acc(self, best_acc):
     #     self.sess.run(self.model.assign_best_acc, feed_dict={self.model.best_acc_tfph: best_acc})

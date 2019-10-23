@@ -176,9 +176,10 @@ class Pix2pix(object):
                 self.crop_pred_iris = self.crop_iris_region_for_identification(pred_img, mask)
                 cls_preds, _ = self.iden_model.forward_network(input_img=self.crop_pred_iris, reuse=True)
 
-            loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
+            cond_loss = tf.math.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                 logits=cls_preds,
                 labels=self.convert_one_hot(self.cls_tfph)))
+            loss = self.labmda_1 * cond_loss
 
         return loss
 
@@ -197,15 +198,16 @@ class Pix2pix(object):
                                       size=[1, self.coord_tfph[i, 2], self.coord_tfph[i, 3], d])
 
             # Resizing and padding as identifications
-            crop_pred_iris_ = tf.cond(tf.math.greater_equal(x=self.coord_tfph[i, 2], y=self.coord_tfph[i, 3]),
-                                    lambda: self.height_bigger_than_width(
-                                        crop_pred_iris, self.coord_tfph[i, 2], self.coord_tfph[i, 3]),
-                                    lambda: self.width_bigger_than_height(
-                                        crop_pred_iris, self.coord_tfph[i, 2], self.coord_tfph[i, 3]))
+            crop_pred_iris = tf.cond(tf.math.greater_equal(x=self.coord_tfph[i, 2], y=self.coord_tfph[i, 3]),
+                                     lambda: self.height_bigger_than_width(
+                                         crop_pred_iris, self.coord_tfph[i, 2], self.coord_tfph[i, 3]),
+                                     lambda: self.width_bigger_than_height(
+                                         crop_pred_iris, self.coord_tfph[i, 2], self.coord_tfph[i, 3]))
 
-            crop_pred_iris_list.append(crop_pred_iris_)
+            crop_pred_iris_list.append(crop_pred_iris)
 
         crop_pred_irises = tf.concat(values=crop_pred_iris_list, axis=3)
+        # Reshape here for ResNet, ResNet need to get h, w of the tensor
         crop_pred_irises = tf.reshape(crop_pred_irises, shape=(-1, *self.iris_shape))
         return crop_pred_irises
 

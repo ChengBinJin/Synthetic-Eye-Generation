@@ -25,8 +25,8 @@ tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
 tf.flags.DEFINE_float('learning_rate', 2e-4, 'initial learning rate for optimizer, default: 0.0002')
 tf.flags.DEFINE_integer('epoch', 200, 'number of epoch, default: 200')
-tf.flags.DEFINE_integer('print_freq', 5, 'print frequency for loss information, default: 50')
-tf.flags.DEFINE_float('lambda_1', 100., 'hyper-paramter for the conditional L1 loss, default: 100.')
+tf.flags.DEFINE_integer('print_freq', 50, 'print frequency for loss information, default: 50')
+tf.flags.DEFINE_float('lambda_1', 0.01, 'hyper-paramter for the conditional L1 loss, default: 0.01')
 tf.flags.DEFINE_integer('sample_freq', 1000, 'sample frequence for checking qualitative evaluation, default: 1000')
 tf.flags.DEFINE_integer('sample_batch', 4, 'number of sampling images for check generator quality, default: 4')
 tf.flags.DEFINE_integer('save_freq', 50000, 'save frequency for model, default: 50000')
@@ -149,13 +149,13 @@ def train(solver, logger, model_dir, log_dir, sample_dir):
             msg = "[{0:7} / {1:7}] Dis_loss: {2:.5f} Gen_loss: {3:.3f}, Adv_loss: {4:.3f}, Cond_loss: {5:.3f}"
             print(msg.format(iter_time, total_iters, dis_loss, gen_loss, adv_loss, cond_loss))
 
-        # # Sampling generated imgs
-        # if iter_time % FLAGS.sample_freq == 0:
-        #     solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
+        # Sampling generated imgs
+        if iter_time % FLAGS.sample_freq == 0:
+            solver.img_sample(iter_time, sample_dir, FLAGS.sample_batch)
 
-        # # Evaluating
-        # if (iter_time % FLAGS.save_freq == 0) or (iter_time + 1 == total_iters):
-        #     solver.save_model(logger, model_dir, iter_time)
+        # Evaluating
+        if (iter_time % FLAGS.save_freq == 0) or (iter_time + 1 == total_iters):
+            solver.save_model(logger, model_dir, iter_time)
 
         iter_time += 1
 
