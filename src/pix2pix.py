@@ -50,7 +50,7 @@ class Pix2pix(object):
             self._init_iden_model()
 
         self._build_graph()         # main graph
-        self._best_metrics_record()
+        # self._best_metrics_record()
         self._init_tensorboard()    # tensorboard
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 

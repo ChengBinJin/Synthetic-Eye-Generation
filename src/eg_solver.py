@@ -25,6 +25,9 @@ class Solver(object):
         self.sess = session
         self.log_dir = log_dir
 
+        # Initialize saver
+        self.saver = tf.compat.v1.train.Saver(max_to_keep=1)
+
         # self.sess = tf.compat.v1.Session()
         self._init_gen_variables()
 
@@ -148,10 +151,10 @@ class Solver(object):
     #                 return True, iter_time + 1
     #             else:
     #                 return False, None, None
-    #
-    # def save_model(self, logger, model_dir, iter_time):
-    #     self.saver.save(self.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
-    #     logger.info('[*] Model saved! Iter: {}'.format(iter_time))
+
+    def save_model(self, logger, model_dir, iter_time):
+        self.saver.save(self.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
+        logger.info('[*] Model saved! Iter: {}'.format(iter_time))
 
 
 # # Evaluator
