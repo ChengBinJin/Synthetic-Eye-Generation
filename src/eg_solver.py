@@ -5,15 +5,9 @@
 # Email: sbkim0407@gmail.com
 # -------------------------------------------------------------------------
 import os
-import cv2
 import numpy as np
 import tensorflow as tf
-
 import utils as utils
-import eg_dataset as eg_dataset
-
-from pix2pix import Pix2pix
-
 
 
 class Solver(object):
@@ -27,8 +21,6 @@ class Solver(object):
 
         # Initialize saver
         self.saver = tf.compat.v1.train.Saver(max_to_keep=1)
-
-        # self.sess = tf.compat.v1.Session()
         self._init_gen_variables()
 
     def _init_gen_variables(self):
@@ -56,6 +48,7 @@ class Solver(object):
 
         return g_loss, g_adv_loss, g_cond_loss, d_loss, summary
 
+
     # def generate_val_imgs(self, batch_size=10):
     #     print(' [*] Generate validation imgs...')
     #
@@ -80,34 +73,62 @@ class Solver(object):
     #         clses_all[index:index + img_vals.shape[0], :] = cls_vals
     #
     #     return segs_all, samples_all, clses_all
-    #
-    # def generate_test_imgs(self, batch_size=20):
-    #     print(' [*] Generate test imgs...')
-    #
-    #     imgs_all = np.zeros((self.data.num_test_imgs, *self.data.output_img_shape), dtype=np.float32)
-    #     segs_all = np.zeros((self.data.num_test_imgs, *self.data.input_img_shape), dtype=np.float32)
-    #     samples_all = np.zeros((self.data.num_test_imgs, *self.data.output_img_shape), dtype=np.float32)
-    #     clses_all = np.zeros((self.data.num_test_imgs, 1), dtype=np.uint8)
-    #
-    #     for i, index in enumerate(range(0, self.data.num_test_imgs, batch_size)):
-    #         print('[{}/{}] generating process...'.format(i + 1, (self.data.num_test_imgs // batch_size)))
-    #
-    #         img_tests, cls_tests, seg_tests = self.data.direct_batch(batch_size=batch_size, index=index, stage='test')
-    #
-    #         feed = {
-    #             self.model.mask_tfph: seg_tests,
-    #             self.model.rate_tfph: 0.,  # rate: 1 - keep_prob
-    #         }
-    #
-    #         samples = self.sess.run(self.model.g_sample, feed_dict=feed)
-    #
-    #         imgs_all[index:index + img_tests.shape[0], :, :, :] = img_tests
-    #         segs_all[index:index + img_tests.shape[0], :, :, :] = seg_tests
-    #         samples_all[index:index + img_tests.shape[0], :, :, :] = samples
-    #         clses_all[index:index + img_tests.shape[0], :] = cls_tests
-    #
-    #     return segs_all, samples_all, clses_all, imgs_all
-    #
+
+
+    def generate_test_imgs(self, batch_size=20):
+        print(' [*] Generate test imgs...')
+
+        imgs_all = np.zeros((self.data.num_test_imgs, *self.data.output_img_shape), dtype=np.float32)
+        segs_all = np.zeros((self.data.num_test_imgs, *self.data.input_img_shape), dtype=np.float32)
+        samples_all = np.zeros((self.data.num_test_imgs, *self.data.output_img_shape), dtype=np.float32)
+        clses_all = np.zeros((self.data.num_test_imgs, 1), dtype=np.uint8)
+
+        for i, index in enumerate(range(0, self.data.num_test_imgs, batch_size)):
+            print('[{}/{}] generating process...'.format(i + 1, (self.data.num_test_imgs // batch_size)))
+
+            img_tests, cls_tests, seg_tests, iris_tests, coord_tests = self.data.direct_batch_include_iris(
+                batch_size=batch_size, index=index, stage='test')
+
+            feed = {self.model.mask_tfph: seg_tests,
+                    self.model.rate_tfph: 0.5,              # rate: 1 - keep_prob
+                    self.model.iden_model.img_tfph: iris_tests,
+                    self.model.iden_model.train_mode: False}
+
+            samples = self.sess.run(self.model.g_sample, feed_dict=feed)
+
+            imgs_all[index:index + img_tests.shape[0], :, :, :] = img_tests
+            segs_all[index:index + img_tests.shape[0], :, :, :] = seg_tests
+            samples_all[index:index + img_tests.shape[0], :, :, :] = samples
+            clses_all[index:index + img_tests.shape[0], :] = cls_tests
+
+        return segs_all, samples_all, clses_all, imgs_all
+
+
+    def eval_identification(self, batch_size=20):
+        print(' [*] Evaluate identification...')
+
+        # Initialize/reset the running varaibels.
+        self.sess.run(self.model.iden_model.running_vars_initializer)
+
+        for i, index in enumerate(range(0, self.data.num_test_imgs, batch_size)):
+            print('[{}/{}] identification process...'.format(i + 1, (self.data.num_test_imgs // batch_size)))
+
+            img_tests, cls_tests, seg_tests, iris_tests, coord_tests = self.data.direct_batch_include_iris(
+                batch_size=batch_size, index=index, stage='test')
+
+            feed = {
+                self.model.iden_model.img_tfph: iris_tests,
+                self.model.iden_model.gt_tfph: cls_tests,
+                self.model.iden_model.train_mode: False
+            }
+
+            self.sess.run(self.model.iden_model.accuracy_metric_update, feed_dict=feed)
+
+        # Calculate the accuracy
+        accuracy = self.sess.run(self.model.iden_model.accuracy_metric)
+        print('Iden accuracy: {:.2%}, the accuracy will be smaller than original one due to resizing input image'.format(accuracy))
+
+
     def img_sample(self, iter_time, save_dir, batch_size=4):
         imgs, clses, segs, irises, coordinates = self.data.train_random_batch_include_iris(batch_size=batch_size)
 
@@ -118,43 +139,36 @@ class Solver(object):
 
         samples = self.sess.run(self.model.g_sample, feed_dict=feed)
         utils.save_imgs(img_stores=[segs, samples, imgs], iter_time=iter_time, save_dir=save_dir, is_vertical=True)
-    #
+
     # def set_best_acc(self, best_acc):
     #     self.sess.run(self.model.assign_best_acc, feed_dict={self.model.best_acc_tfph: best_acc})
-    #
+
     # def get_best_acc(self):
     #     return self.sess.run(self.model.best_acc)
-    #
-    # def load_model(self, logger, model_dir, is_train):
-    #     with self.sess.as_default():
-    #         with self.graph.as_default():
-    #             print('model_dir: {}'.format(model_dir))
-    #
-    #             if is_train:
-    #                 logger.info(' [*] Reading checkpoint...')
-    #             else:
-    #                 print(' [*] Reading checkpoint...')
-    #
-    #             ckpt = tf.train.get_checkpoint_state(model_dir)
-    #             if ckpt and ckpt.model_checkpoint_path:
-    #                 ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-    #                 self.saver.restore(self.sess, os.path.join(model_dir, ckpt_name))
-    #
-    #                 meta_graph_path = ckpt.model_checkpoint_path + '.meta'
-    #                 iter_time = int(meta_graph_path.split('-')[-1].split('.')[0])
-    #
-    #                 if is_train:
-    #                     logger.info(' [!] Load Iter: {}'.format(iter_time))
-    #                 else:
-    #                     print(' [!] Load Iter: {}'.format(iter_time))
-    #
-    #                 return True, iter_time + 1
-    #             else:
-    #                 return False, None, None
+
 
     def save_model(self, logger, model_dir, iter_time):
         self.saver.save(self.sess, os.path.join(model_dir, 'model'), global_step=iter_time)
         logger.info('[*] Model saved! Iter: {}'.format(iter_time))
+
+
+    def load_model(self, logger, model_dir, is_train=False):
+        if is_train:
+            logger.info(' [*] Reading checkpoint...')
+        else:
+            print(' [*] Reading checkpoint...')
+
+        ckpt = tf.train.get_checkpoint_state(model_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(self.sess, os.path.join(model_dir, ckpt_name))
+
+            meta_graph_path = ckpt.model_checkpoint_path + '.meta'
+            iter_time = int(meta_graph_path.split('-')[-1].split('.')[0])
+
+            return True, iter_time + 1
+        else:
+            return False, None, None
 
 
 # # Evaluator

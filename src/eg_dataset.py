@@ -110,7 +110,6 @@ class Dataset(object):
             # Resize
             img = cv2.resize(img, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_LINEAR)
             seg = cv2.resize(seg, None, fx=self.resize_factor, fy=self.resize_factor, interpolation=cv2.INTER_NEAREST)
-            # batch_coords[i, :] = int(np.round(batch_coords[i, :] * self.resize_factor))
 
             # Data augmentation
             if is_augment:

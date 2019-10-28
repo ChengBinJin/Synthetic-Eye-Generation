@@ -112,14 +112,15 @@ def main(_):
 
     # Initialize solver
     solver = Solver(data=data, gen_model=pix2pix, session=sess, flags=FLAGS, log_dir=log_dir)
+    solver.eval_identification()
 
     # Intialize evaluator
     # evaluator = Evaluator(flags=FLAGS, model_dir=FLAGS.load_iden_model, log_dir=log_dir)
 
-    if FLAGS.is_train is True:
-        train(solver, logger, model_dir, log_dir, sample_dir)
+    # if FLAGS.is_train is True:
+    #     train(solver, logger, model_dir, log_dir, sample_dir)
     # else:
-    #     test(solver, evaluator, model_dir, log_dir, test_dir)
+    #     test(solver, model_dir, test_dir)
 
 
 def train(solver, logger, model_dir, log_dir, sample_dir):
@@ -160,7 +161,7 @@ def train(solver, logger, model_dir, log_dir, sample_dir):
         iter_time += 1
 
 
-def test(solver, evaluator, model_dir, log_dir, test_dir):
+def test(solver, model_dir, test_dir):
     if FLAGS.load_model is not None:
         flag, iter_time = solver.load_model(logger=None, model_dir=model_dir, is_train=False)
 
@@ -169,16 +170,17 @@ def test(solver, evaluator, model_dir, log_dir, test_dir):
         else:
             exit(' [!] Failed to restore model {}'.format(FLAGS.load_gan_model))
 
-    segs, outputs, clses, imgs = solver.generate_test_imgs()
-    acc = evaluator.test_top_k(segs, outputs, clses, log_dir)
-
-    print('Saving imgs...')
-    for i in range(segs.shape[0]):
-        if i % 100 == 0:
-            print('[{}/{}] saving...'.format(i, segs.shape[0]))
-
-        utils.save_imgs(img_stores=[imgs[i:i+1], segs[i:i+1], outputs[i:i+1]], save_dir=test_dir,
-                        img_name=os.path.basename(solver.data.test_paths[i]), is_vertical=False, margin=0)
+    solver.eval_identification()
+    # segs, outputs, clses, imgs = solver.generate_test_imgs()
+    # # acc = evaluator.test_top_k(segs, outputs, clses, log_dir)
+    #
+    # print('Saving imgs...')
+    # for i in range(segs.shape[0]):
+    #     if i % 100 == 0:
+    #         print('[{}/{}] saving...'.format(i, segs.shape[0]))
+    #
+    #     utils.save_imgs(img_stores=[imgs[i:i+1], segs[i:i+1], outputs[i:i+1]], save_dir=test_dir,
+    #                     img_name=os.path.basename(solver.data.test_paths[i]), is_vertical=False, margin=0)
 
 
 if __name__ == '__main__':

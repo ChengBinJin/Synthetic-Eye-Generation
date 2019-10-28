@@ -32,12 +32,12 @@ class ResNet18(object):
 
         if self.is_train:
             self._build_graph()
-            self._best_metrices_record()
+            self._init_tensorboard()
         else:
             self._build_test_graph()
 
+        self._best_metrices_record()
         self._eval_graph()
-        self._init_tensorboard()
         tf_utils.show_all_variables(logger=self.logger if self.is_train else None)
 
     def _build_test_graph(self):
