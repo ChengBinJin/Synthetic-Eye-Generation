@@ -84,7 +84,8 @@ class Dataset(object):
 
 
     def train_random_batch(self, batch_size):
-        img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
+        # img_paths = [self.train_paths[idx] for idx in np.random.randint(self.num_train_imgs, size=batch_size)]
+        img_paths = [self.train_paths[idx] for idx in np.random.randint(20, size=batch_size)]
         train_imgs, train_labels, train_segs = self.read_data(img_paths, is_augment=True)
         return train_imgs, train_labels, train_segs
 

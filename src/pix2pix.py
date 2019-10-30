@@ -104,7 +104,8 @@ class Pix2pix(object):
 
             # Generator
             if self.gen_mode == 4:
-                fake_img = self.gen_obj(input_mask, self.rate_tfph, self.iden_model.feat, gen_mode=self.gen_mode)
+                # fake_img = self.gen_obj(input_mask, self.rate_tfph, self.iden_model.feat, gen_mode=self.gen_mode)
+                fake_img = self.gen_obj(input_mask, self.rate_tfph, self.convert_one_hot(self.cls_tfph), gen_mode=self.gen_mode)
             else:
                 fake_img = self.gen_obj(input_mask, self.rate_tfph)
 
@@ -283,7 +284,8 @@ class Generator(object):
         self._ops = _ops
         self.reuse = False
 
-    def __call__(self, x, keep_rate=0.5, iris_feat=None, gen_mode=0):
+    # Multiple code vector
+    def __call__(self, x, keep_rate=0.5, cls_code=None, gen_mode=0):
         with tf.compat.v1.variable_scope(self.name, reuse=self.reuse):
             tf_utils.print_activations(x, logger=self.logger)
 
@@ -336,9 +338,10 @@ class Generator(object):
 
             # ID preserving feature
             if gen_mode == 4:
-                iris_feat = tf.reshape(iris_feat, shape=(-1, 1, 1, iris_feat.get_shape()[-1]), name='iris_feat')
-                iris_feat = tf.concat(values=[iris_feat, iris_feat], axis=1, name='iris_feat_concat')
-                e7_relu = tf.concat([e7_relu, iris_feat], axis=3, name='id_preserving')
+                cls_code = tf.dtypes.cast(cls_code, dtype=tf.dtypes.float32)
+                cls_code = tf.reshape(cls_code, shape=(-1, 1, 1, cls_code.get_shape()[-1]), name='cls_code')
+                cls_feat = tf.tile(cls_code, [1, 2, 1, 1], name='cls_code_concat')
+                e7_relu = tf.concat([e7_relu, cls_feat], axis=3, name='id_preserving')
                 tf_utils.print_activations(e7_relu)
 
             # D0: (2, 1) -> (3, 2)

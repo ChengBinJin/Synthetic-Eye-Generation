@@ -136,6 +136,7 @@ class Solver(object):
         imgs, clses, segs, irises, coordinates = self.data.train_random_batch_include_iris(batch_size=batch_size)
 
         feed = {self.model.mask_tfph: segs,
+                self.model.cls_tfph: clses,
                 self.model.rate_tfph: 0.5,                  # rate: 1 - keep_prob
                 self.model.iden_model.img_tfph: irises,
                 self.model.iden_model.train_mode: False}

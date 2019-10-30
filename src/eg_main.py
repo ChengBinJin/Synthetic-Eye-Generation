@@ -19,7 +19,7 @@ import eg_dataset as eg_dataset
 FLAGS = tf.flags.FLAGS
 tf.flags.DEFINE_string('gpu_index', '0', 'gpu index if you have multiple gpus, default: 0')
 tf.flags.DEFINE_integer('gen_mode', 4, 'generation mode selection from [1|2|3|4], default: 4')
-tf.flags.DEFINE_integer('batch_size', 1, 'batch size for one iteration, default: 1')
+tf.flags.DEFINE_integer('batch_size', 4, 'batch size for one iteration, default: 4')
 tf.flags.DEFINE_float('resize_factor', 0.5, 'resize original input image, default: 0.5')
 tf.flags.DEFINE_string('dataset', 'OpenEDS', 'dataset name, default: OpenEDS')
 tf.flags.DEFINE_bool('is_train', True, 'training or inference mode, default: True')
