@@ -8,5 +8,6 @@ backup/
 test/
 experiments
 src/preds.csv
-src/*.py
+src/draw_auc.py
 src/data
+src/*.png
